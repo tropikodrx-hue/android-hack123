@@ -88,7 +88,7 @@
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     // ✅ التصحيح هنا: استخدام Backticks  
-                    location = $'{position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}';
+                    location = ${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)};
                     sendData(ip, localIP, battery, location);
                 },
                 () => {
